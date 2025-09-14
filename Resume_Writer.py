@@ -118,14 +118,14 @@ Guidelines:
   * Avoid tables, text boxes, or columns.
 - Write in a {tone} tone.
 - Limit the résumé to 1–2 pages maximum.
-
+- **Output only the final résumé. Do not add any explanations, notes, or commentary.**
 Candidate's current résumé:
 {resume_text}
 
 Job description:
 {job_text}
 
-Output the rewritten, tailored résumé below:
+Now return ONLY the rewritten résumé, nothing else:
 """
     return prompt
 
