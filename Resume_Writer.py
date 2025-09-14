@@ -11,18 +11,15 @@ Highlights Name, Sections, Bullets, and Achievements.
 
 import streamlit as st
 import openai
+import os
 from docx import Document
 from docx.shared import Pt
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-import tempfile
-import os
-from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 from reportlab.lib.units import inch
-
+import tempfile
 
 # -------- Build Prompt --------
 def build_prompt(resume_text, job_text, tone="Professional"):
@@ -53,40 +50,35 @@ Now return ONLY the rewritten résumé, nothing else:
 """
     return prompt
 
-
 # -------- Call OpenAI GPT-3.5 --------
 def call_openai_chat(prompt: str, api_key: str) -> str:
     """Call OpenAI GPT-3.5-turbo for résumé generation."""
     openai.api_key = api_key
     try:
         response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",   # locked to GPT-3.5
+            model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": prompt}],
             temperature=0.3,
-            max_tokens=2000  # enough for 1–2 page résumé
+            max_tokens=2000
         )
         return response.choices[0].message.content
     except Exception as e:
         return f"(OpenAI API error) {e}"
 
-
-# -------- Save as DOCX --------
+# -------- Word Template --------
 def save_resume_docx(resume_text, filename="resume.docx"):
     """Save AI-generated resume into a styled Word document."""
     doc = Document()
+    doc.add_paragraph("Candidate Name", style="Title")  # Placeholder name
 
-    # Candidate Name Placeholder
-    doc.add_paragraph("Candidate Name", style="Title")
-
-    # Split sections by lines
     lines = resume_text.split("\n")
     current_section = None
+
     for line in lines:
         line = line.strip()
         if not line:
             continue
 
-        # Detect section headers
         if line.lower() in ["summary", "experience", "education", "skills", "certifications"]:
             current_section = line
             para = doc.add_paragraph(line.upper())
@@ -97,7 +89,6 @@ def save_resume_docx(resume_text, filename="resume.docx"):
             doc.add_paragraph("")  # spacing
         else:
             if current_section == "experience" and line.startswith("-"):
-                # Format as bullet point
                 para = doc.add_paragraph(line[1:].strip(), style="List Bullet")
                 para.runs[0].font.size = Pt(11)
             else:
@@ -107,9 +98,7 @@ def save_resume_docx(resume_text, filename="resume.docx"):
     doc.save(filename)
     return filename
 
-
-
-# -------- Save as PDF --------
+# -------- PDF Template --------
 def save_resume_pdf(resume_text, filename="resume.pdf"):
     """Save AI-generated resume into a styled PDF document."""
     doc = SimpleDocTemplate(filename, pagesize=A4, rightMargin=50, leftMargin=50, topMargin=50, bottomMargin=50)
@@ -124,7 +113,6 @@ def save_resume_pdf(resume_text, filename="resume.pdf"):
         if not line:
             continue
 
-        # Section headers
         if line.lower() in ["summary", "experience", "education", "skills", "certifications"]:
             current_section = line
             story.append(Spacer(1, 0.2 * inch))
@@ -138,29 +126,27 @@ def save_resume_pdf(resume_text, filename="resume.pdf"):
     doc.build(story)
     return filename
 
-
-
 # -------- Streamlit UI --------
 def main():
-    st.title("📄 AI Résumé Writer (GPT-3.5)")
-    st.write("Upload your current résumé and a job description, and get a tailored, ATS-optimized résumé.")
+    st.set_page_config(page_title="AI Résumé Writer", layout="centered")
+    st.title("📄 AI Résumé Writer (GPT-3.5) Commercial Edition")
+    st.write("Upload your résumé and job description to generate an ATS-optimized, job-aligned résumé.")
 
-    # Use server-side key
+    # Server-side API key
     api_key_input = os.getenv("OPENAI_API_KEY")
+    if not api_key_input:
+        st.error("Server-side OpenAI API key not found. Set OPENAI_API_KEY in environment.")
+        return
 
     resume_file = st.file_uploader("Upload your Résumé (TXT, DOCX)", type=["txt", "docx"])
     job_file = st.file_uploader("Upload Job Description (TXT, DOCX)", type=["txt", "docx"])
     tone = st.selectbox("Choose Résumé Tone", ["Professional", "Concise", "Impactful", "Leadership"])
 
     if st.button("Generate Tailored Résumé"):
-        if not api_key_input:
-            st.error("Server-side OpenAI API key not found.")
-            return
         if not resume_file or not job_file:
             st.error("Please upload both résumé and job description.")
             return
 
-        # Read uploaded files
         def read_file(file):
             if file.name.endswith(".txt"):
                 return file.read().decode("utf-8")
@@ -172,28 +158,23 @@ def main():
         resume_text = read_file(resume_file)
         job_text = read_file(job_file)
 
-        # Build prompt and call AI
+        # Generate prompt and call AI
         prompt = build_prompt(resume_text, job_text, tone=tone)
         output = call_openai_chat(prompt, api_key_input)
 
         st.subheader("✨ Tailored Résumé")
         st.text_area("Generated Résumé", output, height=400)
 
-
-        # Save files
+        # Save Word & PDF
         with tempfile.TemporaryDirectory() as tmpdir:
-            docx_file = os.path.join(tmpdir, "resume.docx")
-            pdf_file = os.path.join(tmpdir, "resume.pdf")
-
-            save_resume_docx(output, docx_file)
-            save_resume_pdf(output, pdf_file)
+            docx_file = save_resume_docx(output, f"{tmpdir}/resume.docx")
+            pdf_file = save_resume_pdf(output, f"{tmpdir}/resume.pdf")
 
             with open(docx_file, "rb") as f:
-                st.download_button("📄 Download as Word (.docx)", f, file_name="resume.docx")
+                st.download_button("📄 Download Word (.docx)", f, file_name="resume.docx")
 
             with open(pdf_file, "rb") as f:
-                st.download_button("📑 Download as PDF", f, file_name="resume.pdf")
-
+                st.download_button("📑 Download PDF", f, file_name="resume.pdf")
 
 if __name__ == "__main__":
     main()
