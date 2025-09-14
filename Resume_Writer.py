@@ -145,7 +145,8 @@ def main():
     st.title("📄 AI Résumé Writer (GPT-3.5)")
     st.write("Upload your current résumé and a job description, and get a tailored, ATS-optimized résumé.")
 
-    api_key_input = st.text_input("Enter your OpenAI API Key", type="password")
+    api_key_input = os.getenv("OPENAI_API_KEY")
+    output = call_openai_chat(prompt, api_key_input)
 
     resume_file = st.file_uploader("Upload your Résumé (TXT, DOCX)", type=["txt", "docx"])
     job_file = st.file_uploader("Upload Job Description (TXT, DOCX)", type=["txt", "docx"])
