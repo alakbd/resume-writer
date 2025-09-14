@@ -96,8 +96,7 @@ def build_prompt(resume_text: str, job_text: str, tone: str = 'professional and 
     prompt = f"{system_instructions}\n\nRÉSUMÉ:\n{resume_text}\n\nJOB DESCRIPTION:\n{job_text}\n\nTone: {tone}.\nReturn only the tailored résumé."
     return prompt
 
-def call_openai_chat(prompt: str, api_key: str, model: str = "gpt-3.5-turbo") -> str:
-    openai.api_key = api_key
+def call_openai_chat(prompt: str, model: str = "gpt-3.5-turbo") -> str:
     try:
         response = openai.chat.completions.create(
             model=model,
@@ -184,9 +183,9 @@ st.title('AI Resume Writer — Tailored Résumé with Highlights')
 
 st.markdown("Upload résumé and job description. Sections, bullets, and achievements are highlighted. Download DOCX & PDF.")
 
-api_key_input = st.text_input('OpenAI API Key', type='password')
+api_key_input = os.environ.get('OPENAI_API_KEY', '')
 if not api_key_input:
-    api_key_input = os.environ.get('OPENAI_API_KEY', '')
+    st.error("OpenAI API key not found. Please set it in the server environment.")
 
 uploaded_resume = st.file_uploader('Upload résumé (PDF/DOCX/TXT)', type=['pdf','docx','txt'])
 uploaded_jd = st.file_uploader('Upload job description (PDF/DOCX/TXT)', type=['pdf','docx','txt'])
