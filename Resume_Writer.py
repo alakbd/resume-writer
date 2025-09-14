@@ -138,19 +138,21 @@ def call_openai_chat(prompt: str, model: str = "gpt-3.5-turbo") -> str:
         return f"(OpenAI API error) {e}"
 
 # --- DOCX generation ---
-def create_docx(resume_text: str) -> BytesIO:
+def create_docx(resume_text: str, filename="tailored_resume.docx") -> BytesIO:
     doc = Document()
-    headers = ["summary:", "skills:", "experience:", "education:", "certifications:"]
     for line in resume_text.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
+        # Bold only section headers
+        headers = ["name:", "skills:", "experience:", "education:", "certifications:"]
         if any(stripped.lower().startswith(h) for h in headers):
             p = doc.add_paragraph()
             run = p.add_run(stripped)
             run.bold = True
             run.font.size = Pt(12)
         else:
+            # Keep the original line format
             doc.add_paragraph(stripped)
     buf = BytesIO()
     doc.save(buf)
@@ -190,8 +192,8 @@ def create_pdf(resume_text: str) -> BytesIO:
     return buf
 
 # --- Streamlit UI ---
-st.set_page_config(page_title="AI Resume Writer", layout="centered")
-st.title("AI Resume Writer — Tailor your résumé")
+st.set_page_config(page_title="Resume Writer", layout="centered")
+st.title("Resume Writer — Tailor your résumé")
 
 # File upload
 uploaded_resume = st.file_uploader("Upload your résumé (PDF/DOCX/TXT)", type=['pdf', 'docx', 'txt'])
