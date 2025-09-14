@@ -96,16 +96,15 @@ def build_prompt(resume_text: str, job_text: str, tone: str = 'professional and 
     prompt = f"{system_instructions}\n\nRÉSUMÉ:\n{resume_text}\n\nJOB DESCRIPTION:\n{job_text}\n\nTone: {tone}.\nReturn only the tailored résumé."
     return prompt
 
+openai.api_key = os.environ.get("OPENAI_API_KEY")
+
 def call_openai_chat(prompt: str, model: str = "gpt-3.5-turbo") -> str:
     try:
         response = openai.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "system", "content": "You are a professional résumé writer."},
-                {"role": "user", "content": prompt}
-            ],
+            messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
-            max_tokens=1500
+            max_tokens=1200
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -191,34 +190,30 @@ uploaded_resume = st.file_uploader('Upload résumé (PDF/DOCX/TXT)', type=['pdf'
 uploaded_jd = st.file_uploader('Upload job description (PDF/DOCX/TXT)', type=['pdf','docx','txt'])
 tone = st.selectbox('Tone', ['professional and concise','friendly','formal','creative'])
 
-if st.button('Generate Résumé'):
-    if not api_key_input:
-        st.error("Provide OpenAI API key.")
-    elif not uploaded_resume or not uploaded_jd:
-        st.error("Upload both résumé and job description.")
+if st.button('Generate tailored résumé'):
+    if not uploaded_resume or not uploaded_jd:
+        st.error('Please upload both a résumé and a job description.')
     else:
-        with st.spinner('Extracting text...'):
+        with st.spinner('Extracting files...'):
             resume_text = extract_text(uploaded_resume)
             job_text = extract_text(uploaded_jd)
-        if not resume_text.strip() or not job_text.strip():
-            st.error("Could not extract text from files.")
+
+        prompt = build_prompt(resume_text, job_text, tone=custom_tone)
+
+        st.info('Sending request to OpenAI...')
+        with st.spinner('Generating tailored résumé...'):
+            # ✅ Correct usage of call_openai_chat
+            output = call_openai_chat(prompt, model="gpt-3.5-turbo")
+
+        if output.startswith('(OpenAI API error)'):
+            st.error(output)
         else:
-            prompt = build_prompt(resume_text, job_text, tone)
-            with st.spinner('Generating tailored résumé...'):
-                output = call_openai_chat(prompt, api_key_input)
-            if output.startswith('(OpenAI API error)'):
-                st.error(output)
-            else:
-                st.success('Résumé generated!')
+            st.success('Done — tailored résumé generated.')
+            # Show preview / download buttons as before
+            st.download_button('Download résumé as .txt', output, file_name='tailored_resume.txt')
+            st.subheader('Tailored résumé (preview)')
+            st.code(output, language='text')
 
-                candidate_name = extract_name(resume_text)
-                docx_buf = create_docx_resume(output, candidate_name)
-                pdf_buf = docx_to_pdf(docx_buf)
-
-                st.download_button("Download as DOCX", docx_buf, "tailored_resume.docx")
-                st.download_button("Download as PDF", pdf_buf, "tailored_resume.pdf")
-                st.subheader("Preview:")
-                st.code(output, language='text')
 
 st.markdown('---')
 st.markdown('**Privacy:** Uploaded files are sent to OpenAI only if you provide a key.')
