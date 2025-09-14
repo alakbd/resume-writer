@@ -96,7 +96,6 @@ def extract_text(file) -> str:
         return extract_text_from_docx(raw)
     return extract_text_from_txt(raw)
 
-# --- Build prompt ---
 def build_prompt(resume_text: str, job_text: str, tone: str = "professional and concise") -> str:
     system_instructions = (
         "You are a professional résumé writer and career coach. "
@@ -120,8 +119,10 @@ def call_openai_chat(prompt: str, model: str = "gpt-3.5-turbo") -> str:
     try:
         response = openai.chat.completions.create(
             model=model,
-            messages=[{"role": "system", "content": "You are a professional résumé writer."},
-                      {"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": "You are a professional résumé writer."},
+                {"role": "user", "content": prompt}
+            ],
             temperature=0.2,
             max_tokens=1500
         )
@@ -153,10 +154,17 @@ def create_docx(resume_text: str, filename="tailored_resume.docx") -> BytesIO:
 st.set_page_config(page_title="AI Resume Writer", layout="centered")
 st.title("AI Resume Writer — Tailor your résumé")
 
+# --- File upload ---
 uploaded_resume = st.file_uploader("Upload your résumé (PDF/DOCX/TXT)", type=['pdf', 'docx', 'txt'])
 uploaded_jd = st.file_uploader("Upload job description (PDF/DOCX/TXT)", type=['pdf', 'docx', 'txt'])
-custom_tone = st.selectbox("Tone for résumé", ["professional and concise", "friendly and conversational", "formal", "creative"])
 
+# --- Tone selection MUST be defined BEFORE using it ---
+custom_tone = st.selectbox(
+    "Tone for résumé",
+    ["professional and concise", "friendly and conversational", "formal", "creative"]
+)
+
+# --- Generate résumé button ---
 if st.button("Generate tailored résumé"):
     if not uploaded_resume or not uploaded_jd:
         st.error("Please upload both résumé and job description.")
@@ -181,8 +189,6 @@ if st.button("Generate tailored résumé"):
                 st.download_button("Download résumé as DOCX", docx_buf, file_name="tailored_resume.docx")
                 st.subheader("Résumé Preview")
                 st.code(output, language="text")
-
-
 
 st.markdown('---')
 st.markdown('**Privacy:** We dont hold any personal info.Uploaded files are sent to OpenAI only if you provide a key.')
