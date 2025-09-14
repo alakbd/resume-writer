@@ -134,17 +134,19 @@ def call_openai_chat(prompt: str, model: str = "gpt-3.5-turbo") -> str:
 def create_docx(resume_text: str, filename="tailored_resume.docx") -> BytesIO:
     doc = Document()
     for line in resume_text.splitlines():
-        line = line.strip()
-        if not line:
+        stripped = line.strip()
+        if not stripped:
             continue
-        # Bold section headers
-        if any(line.lower().startswith(h) for h in ["skills:", "experience:", "education:", "certifications:", "name:"]):
+        # Bold only section headers
+        headers = ["name:", "skills:", "experience:", "education:", "certifications:"]
+        if any(stripped.lower().startswith(h) for h in headers):
             p = doc.add_paragraph()
-            run = p.add_run(line)
+            run = p.add_run(stripped)
             run.bold = True
             run.font.size = Pt(12)
         else:
-            doc.add_paragraph(line)
+            # Keep the original line format
+            doc.add_paragraph(stripped)
     buf = BytesIO()
     doc.save(buf)
     buf.seek(0)
