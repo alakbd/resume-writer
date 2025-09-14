@@ -17,6 +17,11 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 import tempfile
 import os
+from docx.shared import Pt, RGBColor
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from reportlab.lib.units import inch
 
 
 # -------- Build Prompt --------
@@ -67,56 +72,72 @@ def call_openai_chat(prompt: str, api_key: str) -> str:
 
 # -------- Save as DOCX --------
 def save_resume_docx(resume_text, filename="resume.docx"):
-    """Save AI-generated resume text into a nicely formatted Word document."""
+    """Save AI-generated resume into a styled Word document."""
     doc = Document()
 
-    # Title
-    doc.add_heading("Résumé", level=0)
+    # Candidate Name Placeholder
+    doc.add_paragraph("Candidate Name", style="Title")
 
-    # Split sections by line
-    sections = resume_text.split("\n")
-    for line in sections:
+    # Split sections by lines
+    lines = resume_text.split("\n")
+    current_section = None
+    for line in lines:
         line = line.strip()
         if not line:
             continue
-        # If line looks like a section header
-        if line.lower() in ["summary", "experience", "education", "skills", "certifications"]:
-            doc.add_heading(line, level=1)
-        else:
-            para = doc.add_paragraph(line)
-            para.style.font.size = Pt(11)
 
-    # Save docx
+        # Detect section headers
+        if line.lower() in ["summary", "experience", "education", "skills", "certifications"]:
+            current_section = line
+            para = doc.add_paragraph(line.upper())
+            run = para.runs[0]
+            run.bold = True
+            run.font.size = Pt(14)
+            para.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+            doc.add_paragraph("")  # spacing
+        else:
+            if current_section == "experience" and line.startswith("-"):
+                # Format as bullet point
+                para = doc.add_paragraph(line[1:].strip(), style="List Bullet")
+                para.runs[0].font.size = Pt(11)
+            else:
+                para = doc.add_paragraph(line)
+                para.runs[0].font.size = Pt(11)
+
     doc.save(filename)
     return filename
 
 
+
 # -------- Save as PDF --------
 def save_resume_pdf(resume_text, filename="resume.pdf"):
-    """Save AI-generated resume text into a clean PDF format."""
-    c = canvas.Canvas(filename, pagesize=A4)
-    width, height = A4
+    """Save AI-generated resume into a styled PDF document."""
+    doc = SimpleDocTemplate(filename, pagesize=A4, rightMargin=50, leftMargin=50, topMargin=50, bottomMargin=50)
+    styles = getSampleStyleSheet()
+    story = []
 
-    y = height - 50
-    for line in resume_text.split("\n"):
+    lines = resume_text.split("\n")
+    current_section = None
+
+    for line in lines:
         line = line.strip()
         if not line:
-            y -= 15
             continue
 
+        # Section headers
         if line.lower() in ["summary", "experience", "education", "skills", "certifications"]:
-            c.setFont("Helvetica-Bold", 14)
+            current_section = line
+            story.append(Spacer(1, 0.2 * inch))
+            story.append(Paragraph(f"<b>{line.upper()}</b>", styles["Heading2"]))
         else:
-            c.setFont("Helvetica", 11)
+            if current_section == "experience" and line.startswith("-"):
+                story.append(Paragraph("• " + line[1:].strip(), styles["Normal"]))
+            else:
+                story.append(Paragraph(line, styles["Normal"]))
 
-        c.drawString(50, y, line)
-        y -= 15
-        if y < 50:
-            c.showPage()
-            y = height - 50
-
-    c.save()
+    doc.build(story)
     return filename
+
 
 
 # -------- Streamlit UI --------
