@@ -102,23 +102,31 @@ def extract_text(file) -> str:
     return extract_text_from_txt(raw)
 
 # --- Build OpenAI prompt ---
-def build_prompt(resume_text: str, job_text: str, tone: str = "professional and concise") -> str:
-    system_instructions = (
-        "You are a professional résumé writer and career coach. "
-        "Given an existing résumé and a job description, produce a tailored, ATS-friendly résumé targeted to the job. "
-        "Preserve all factual work experience, skills, education, and certifications. "
-        "Do NOT include personal information such as name, address, phone, or email. "
-        "Rewrite bullets to be achievement-focused, include metrics when possible, add keywords from the job description, remove unrelated info. "
-        "Return only the final résumé in plain text with sections: Summary, Work Experience, Education, Skills, Certifications. "
-        "Use clear bullet points (use '-' or '•'). Bold section headers."
-    )
+def build_prompt(resume_text, job_text, tone="Professional"):
+    """Builds a prompt for ATS-optimized, job-aligned résumé generation using GPT-3.5."""
+    prompt = f"""
+You are a professional résumé writer. Rewrite the candidate's résumé so it is tailored 
+to the job description and optimized for Applicant Tracking Systems (ATS).
 
-    prompt = (
-        f"SYSTEM:\n{system_instructions}\n\n"
-        f"INPUT — ORIGINAL RÉSUMÉ:\n{resume_text}\n\n"
-        f"INPUT — JOB DESCRIPTION:\n{job_text}\n\n"
-        f"OUTPUT INSTRUCTIONS:\nTone: {tone}.\nMax length: 1.5 pages. Return only the résumé."
-    )
+Guidelines:
+- Focus on aligning résumé with the job description: emphasize relevant experience, skills, and achievements.
+- Keep only relevant roles in detail. Summarize or remove unrelated/older experiences.
+- Optimize for ATS: naturally include important keywords from the job description.
+- Keep formatting simple and ATS-friendly: 
+  * Use plain section headers (Summary, Experience, Education, Skills, Certifications).
+  * Use bullet points for achievements.
+  * Avoid tables, text boxes, or columns.
+- Write in a {tone} tone.
+- Limit the résumé to 1–2 pages maximum.
+
+Candidate's current résumé:
+{resume_text}
+
+Job description:
+{job_text}
+
+Output the rewritten, tailored résumé below:
+"""
     return prompt
 
 # --- OpenAI call ---
@@ -131,7 +139,7 @@ def call_openai_chat(prompt: str, model: str = "gpt-3.5-turbo") -> str:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2,
-            max_tokens=1500
+            max_tokens=2000
         )
         return response.choices[0].message.content
     except Exception as e:
