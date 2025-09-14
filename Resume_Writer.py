@@ -11,99 +11,17 @@ Highlights Name, Sections, Bullets, and Achievements.
 
 import streamlit as st
 import openai
-import tempfile
-import os
-from io import BytesIO
 from docx import Document
 from docx.shared import Pt
-from typing import Optional
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+import tempfile
+import os
 
-# PDF generation
-from reportlab.lib.pagesizes import LETTER
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
-# --- Set OpenAI API key from environment ---
-openai.api_key = os.environ.get("OPENAI_API_KEY")
-if not openai.api_key:
-    st.error("OpenAI API key not found. Set OPENAI_API_KEY in your environment.")
-    st.stop()
-
-# --- File parsing ---
-try:
-    from PyPDF2 import PdfReader
-except ImportError:
-    PdfReader = None
-
-try:
-    import docx2txt
-except ImportError:
-    docx2txt = None
-
-try:
-    import docx
-except ImportError:
-    docx = None
-
-def extract_text_from_pdf(bytes_data: bytes) -> str:
-    if PdfReader is None:
-        return "(PyPDF2 not installed — cannot extract PDF text)"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        tmp.write(bytes_data)
-        tmp.flush()
-        tmp_name = tmp.name
-    try:
-        reader = PdfReader(tmp_name)
-        out = []
-        for page in reader.pages:
-            text = page.extract_text() or ""
-            out.append(text)
-        return "\n".join(out)
-    finally:
-        try: os.remove(tmp_name)
-        except Exception: pass
-
-def extract_text_from_docx(bytes_data: bytes) -> str:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
-        tmp.write(bytes_data)
-        tmp.flush()
-        tmp_name = tmp.name
-    try:
-        if docx2txt is not None:
-            return docx2txt.process(tmp_name) or ""
-        elif docx is not None:
-            doc = docx.Document(tmp_name)
-            return "\n".join([p.text for p in doc.paragraphs])
-        else:
-            return "(docx parsing libs not installed)"
-    finally:
-        try: os.remove(tmp_name)
-        except Exception: pass
-
-def extract_text_from_txt(bytes_data: bytes) -> str:
-    try:
-        return bytes_data.decode('utf-8')
-    except:
-        try:
-            return bytes_data.decode('latin-1')
-        except:
-            return ""
-
-def extract_text(file) -> str:
-    if file is None:
-        return ""
-    raw = file.read()
-    name = getattr(file, 'name', '') or ''
-    lower = name.lower()
-    if lower.endswith('.pdf') or raw[:4] == b'%PDF':
-        return extract_text_from_pdf(raw)
-    if lower.endswith('.docx'):
-        return extract_text_from_docx(raw)
-    return extract_text_from_txt(raw)
-
-# --- Build OpenAI prompt ---
+# -------- Build Prompt --------
 def build_prompt(resume_text, job_text, tone="Professional"):
-    """Builds a prompt for ATS-optimized, job-aligned résumé generation using GPT-3.5."""
+    """Prompt for ATS-optimized, job-aligned résumé using GPT-3.5 (no explanations)."""
     prompt = f"""
 You are a professional résumé writer. Rewrite the candidate's résumé so it is tailored 
 to the job description and optimized for Applicant Tracking Systems (ATS).
@@ -118,7 +36,8 @@ Guidelines:
   * Avoid tables, text boxes, or columns.
 - Write in a {tone} tone.
 - Limit the résumé to 1–2 pages maximum.
-- **Output only the final résumé. Do not add any explanations, notes, or commentary.**
+- Output only the final résumé. Do not add explanations or commentary.
+
 Candidate's current résumé:
 {resume_text}
 
@@ -129,122 +48,133 @@ Now return ONLY the rewritten résumé, nothing else:
 """
     return prompt
 
-# --- OpenAI call ---
-def call_openai_chat(prompt: str, model: str = "gpt-3.5-turbo") -> str:
+
+# -------- Call OpenAI GPT-3.5 --------
+def call_openai_chat(prompt: str, api_key: str) -> str:
+    """Call OpenAI GPT-3.5-turbo for résumé generation."""
+    openai.api_key = api_key
     try:
         response = openai.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are a professional résumé writer."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            max_tokens=2000
+            model="gpt-3.5-turbo",   # locked to GPT-3.5
+            messages=[{"role": "system", "content": prompt}],
+            temperature=0.3,
+            max_tokens=2000  # enough for 1–2 page résumé
         )
         return response.choices[0].message.content
     except Exception as e:
         return f"(OpenAI API error) {e}"
 
-# --- DOCX generation ---
-def create_docx(resume_text: str, filename="tailored_resume.docx") -> BytesIO:
+
+# -------- Save as DOCX --------
+def save_resume_docx(resume_text, filename="resume.docx"):
+    """Save AI-generated resume text into a nicely formatted Word document."""
     doc = Document()
-    for line in resume_text.splitlines():
-        stripped = line.strip()
-        if not stripped:
+
+    # Title
+    doc.add_heading("Résumé", level=0)
+
+    # Split sections by line
+    sections = resume_text.split("\n")
+    for line in sections:
+        line = line.strip()
+        if not line:
             continue
-        # Bold only section headers
-        headers = ["name:", "skills:", "experience:", "education:", "certifications:"]
-        if any(stripped.lower().startswith(h) for h in headers):
-            p = doc.add_paragraph()
-            run = p.add_run(stripped)
-            run.bold = True
-            run.font.size = Pt(12)
+        # If line looks like a section header
+        if line.lower() in ["summary", "experience", "education", "skills", "certifications"]:
+            doc.add_heading(line, level=1)
         else:
-            # Keep the original line format
-            doc.add_paragraph(stripped)
-    buf = BytesIO()
-    doc.save(buf)
-    buf.seek(0)
-    return buf
+            para = doc.add_paragraph(line)
+            para.style.font.size = Pt(11)
 
-# --- PDF generation ---
-def create_pdf(resume_text: str) -> BytesIO:
-    buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=LETTER,
-                            leftMargin=40, rightMargin=40, topMargin=40, bottomMargin=40)
-    styles = getSampleStyleSheet()
-    story = []
+    # Save docx
+    doc.save(filename)
+    return filename
 
-    header_style = ParagraphStyle(
-        name='Header',
-        parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=12,
-        spaceAfter=6
-    )
-    normal_style = styles['Normal']
 
-    headers = ["summary:", "skills:", "experience:", "education:", "certifications:"]
+# -------- Save as PDF --------
+def save_resume_pdf(resume_text, filename="resume.pdf"):
+    """Save AI-generated resume text into a clean PDF format."""
+    c = canvas.Canvas(filename, pagesize=A4)
+    width, height = A4
 
-    for line in resume_text.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            story.append(Spacer(1, 4))
+    y = height - 50
+    for line in resume_text.split("\n"):
+        line = line.strip()
+        if not line:
+            y -= 15
             continue
-        if any(stripped.lower().startswith(h) for h in headers):
-            story.append(Paragraph(stripped, header_style))
+
+        if line.lower() in ["summary", "experience", "education", "skills", "certifications"]:
+            c.setFont("Helvetica-Bold", 14)
         else:
-            story.append(Paragraph(stripped, normal_style))
-    doc.build(story)
-    buf.seek(0)
-    return buf
+            c.setFont("Helvetica", 11)
 
-# --- Streamlit UI ---
-st.set_page_config(page_title="Resume Writer", layout="centered")
-st.title("Resume Writer — Tailor your résumé")
+        c.drawString(50, y, line)
+        y -= 15
+        if y < 50:
+            c.showPage()
+            y = height - 50
 
-# File upload
-uploaded_resume = st.file_uploader("Upload your résumé (PDF/DOCX/TXT)", type=['pdf', 'docx', 'txt'])
-uploaded_jd = st.file_uploader("Upload job description (PDF/DOCX/TXT)", type=['pdf', 'docx', 'txt'])
+    c.save()
+    return filename
 
-# Tone selection
-custom_tone = st.selectbox(
-    "Tone for résumé",
-    ["professional and concise", "friendly and conversational", "formal", "creative"]
-)
 
-# Generate résumé
-if st.button("Generate tailored résumé"):
-    if not uploaded_resume or not uploaded_jd:
-        st.error("Please upload both résumé and job description.")
-    else:
-        with st.spinner("Extracting files..."):
-            resume_text = extract_text(uploaded_resume)
-            job_text = extract_text(uploaded_jd)
+# -------- Streamlit UI --------
+def main():
+    st.title("📄 AI Résumé Writer (GPT-3.5)")
+    st.write("Upload your current résumé and a job description, and get a tailored, ATS-optimized résumé.")
 
-        if not resume_text.strip() or not job_text.strip():
-            st.error("Could not extract text from one of the files.")
-        else:
-            prompt = build_prompt(resume_text, job_text, tone=custom_tone)
-            st.info("Generating tailored résumé...")
-            output = call_openai_chat(prompt, model="gpt-3.5-turbo")
+    api_key_input = st.text_input("Enter your OpenAI API Key", type="password")
 
-            if output.startswith("(OpenAI API error)"):
-                st.error(output)
-            else:
-                st.success("Résumé generated!")
-                
-                # DOCX download
-                docx_buf = create_docx(output)
-                st.download_button("Download résumé as DOCX", docx_buf, file_name="tailored_resume.docx")
-                
-                # PDF download
-                pdf_buf = create_pdf(output)
-                st.download_button("Download résumé as PDF", pdf_buf, file_name="tailored_resume.pdf")
-                
-                # Preview
-                st.subheader("Résumé Preview")
-                st.code(output, language="text")
+    resume_file = st.file_uploader("Upload your Résumé (TXT, DOCX)", type=["txt", "docx"])
+    job_file = st.file_uploader("Upload Job Description (TXT, DOCX)", type=["txt", "docx"])
+
+    tone = st.selectbox("Choose Résumé Tone", ["Professional", "Concise", "Impactful", "Leadership"])
+
+    if st.button("Generate Tailored Résumé"):
+        if not api_key_input:
+            st.error("Please enter your OpenAI API Key.")
+            return
+        if not resume_file or not job_file:
+            st.error("Please upload both résumé and job description.")
+            return
+
+        # Read uploaded files
+        def read_file(file):
+            if file.name.endswith(".txt"):
+                return file.read().decode("utf-8")
+            elif file.name.endswith(".docx"):
+                doc = Document(file)
+                return "\n".join([para.text for para in doc.paragraphs])
+            return ""
+
+        resume_text = read_file(resume_file)
+        job_text = read_file(job_file)
+
+        # Build prompt and call AI
+        prompt = build_prompt(resume_text, job_text, tone=tone)
+        output = call_openai_chat(prompt, api_key_input)
+
+        st.subheader("✨ Tailored Résumé")
+        st.text_area("Generated Résumé", output, height=400)
+
+        # Save files
+        with tempfile.TemporaryDirectory() as tmpdir:
+            docx_file = os.path.join(tmpdir, "resume.docx")
+            pdf_file = os.path.join(tmpdir, "resume.pdf")
+
+            save_resume_docx(output, docx_file)
+            save_resume_pdf(output, pdf_file)
+
+            with open(docx_file, "rb") as f:
+                st.download_button("📄 Download as Word (.docx)", f, file_name="resume.docx")
+
+            with open(pdf_file, "rb") as f:
+                st.download_button("📑 Download as PDF", f, file_name="resume.pdf")
+
+
+if __name__ == "__main__":
+    main()
 
 
 st.markdown('---')
