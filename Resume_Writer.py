@@ -145,17 +145,16 @@ def main():
     st.title("📄 AI Résumé Writer (GPT-3.5)")
     st.write("Upload your current résumé and a job description, and get a tailored, ATS-optimized résumé.")
 
+    # Use server-side key
     api_key_input = os.getenv("OPENAI_API_KEY")
-    output = call_openai_chat(prompt, api_key_input)
 
     resume_file = st.file_uploader("Upload your Résumé (TXT, DOCX)", type=["txt", "docx"])
     job_file = st.file_uploader("Upload Job Description (TXT, DOCX)", type=["txt", "docx"])
-
     tone = st.selectbox("Choose Résumé Tone", ["Professional", "Concise", "Impactful", "Leadership"])
 
     if st.button("Generate Tailored Résumé"):
         if not api_key_input:
-            st.error("Please enter your OpenAI API Key.")
+            st.error("Server-side OpenAI API key not found.")
             return
         if not resume_file or not job_file:
             st.error("Please upload both résumé and job description.")
@@ -179,6 +178,7 @@ def main():
 
         st.subheader("✨ Tailored Résumé")
         st.text_area("Generated Résumé", output, height=400)
+
 
         # Save files
         with tempfile.TemporaryDirectory() as tmpdir:
