@@ -129,7 +129,7 @@ def save_resume_pdf(resume_text, filename="resume.pdf"):
 # -------- Streamlit UI --------
 def main():
     st.set_page_config(page_title="AI Résumé Writer", layout="centered")
-    st.title("📄 AI Résumé Writer (GPT-3.5) Commercial Edition")
+    st.title("📄 Résumé Writer")
     st.write("Upload your résumé and job description to generate an ATS-optimized, job-aligned résumé.")
 
     # Server-side API key
