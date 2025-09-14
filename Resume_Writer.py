@@ -5,7 +5,7 @@
 
 
 """
-AI Resume Writer with Enhanced DOCX & PDF Export
+Resume Writer with Enhanced DOCX & PDF Export
 Highlights Name, Sections, Bullets, and Achievements.
 """
 
@@ -178,14 +178,14 @@ def docx_to_pdf(docx_buffer: BytesIO) -> BytesIO:
     return pdf_bytes
 
 # --- Streamlit UI ---
-st.set_page_config(page_title='AI Resume Writer', layout='centered')
-st.title('AI Resume Writer — Tailored Résumé with Highlights')
+st.set_page_config(page_title='Resume Writer', layout='centered')
+st.title('Resume Writer — Tailored Résumé with Highlights')
 
 st.markdown("Upload résumé and job description. Sections, bullets, and achievements are highlighted. Download DOCX & PDF.")
 
 api_key_input = os.environ.get('OPENAI_API_KEY', '')
 if not api_key_input:
-    st.error("OpenAI API key not found. Please set it in the server environment.")
+    st.error("Please setup Key it in the server environment.")
 
 uploaded_resume = st.file_uploader('Upload résumé (PDF/DOCX/TXT)', type=['pdf','docx','txt'])
 uploaded_jd = st.file_uploader('Upload job description (PDF/DOCX/TXT)', type=['pdf','docx','txt'])
