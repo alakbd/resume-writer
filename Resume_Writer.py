@@ -18,6 +18,11 @@ from docx import Document
 from docx.shared import Pt
 from typing import Optional
 
+# PDF generation
+from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+
 # --- Set OpenAI API key from environment ---
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 if not openai.api_key:
@@ -96,13 +101,15 @@ def extract_text(file) -> str:
         return extract_text_from_docx(raw)
     return extract_text_from_txt(raw)
 
+# --- Build OpenAI prompt ---
 def build_prompt(resume_text: str, job_text: str, tone: str = "professional and concise") -> str:
     system_instructions = (
         "You are a professional résumé writer and career coach. "
         "Given an existing résumé and a job description, produce a tailored, ATS-friendly résumé targeted to the job. "
-        "Preserve factual details (dates, employers, degrees, locations). "
+        "Preserve all factual work experience, skills, education, and certifications. "
+        "Do NOT include personal information such as name, address, phone, or email. "
         "Rewrite bullets to be achievement-focused, include metrics when possible, add keywords from the job description, remove unrelated info. "
-        "Return only the final résumé in plain text. Include a 2–3 line summary at the top, then sections: Work Experience, Education, Skills, Certifications (if present). "
+        "Return only the final résumé in plain text with sections: Summary, Work Experience, Education, Skills, Certifications. "
         "Use clear bullet points (use '-' or '•'). Bold section headers."
     )
 
@@ -130,25 +137,55 @@ def call_openai_chat(prompt: str, model: str = "gpt-3.5-turbo") -> str:
     except Exception as e:
         return f"(OpenAI API error) {e}"
 
-# --- Generate DOCX ---
-def create_docx(resume_text: str, filename="tailored_resume.docx") -> BytesIO:
+# --- DOCX generation ---
+def create_docx(resume_text: str) -> BytesIO:
     doc = Document()
+    headers = ["summary:", "skills:", "experience:", "education:", "certifications:"]
     for line in resume_text.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
-        # Bold only section headers
-        headers = ["name:", "skills:", "experience:", "education:", "certifications:"]
         if any(stripped.lower().startswith(h) for h in headers):
             p = doc.add_paragraph()
             run = p.add_run(stripped)
             run.bold = True
             run.font.size = Pt(12)
         else:
-            # Keep the original line format
             doc.add_paragraph(stripped)
     buf = BytesIO()
     doc.save(buf)
+    buf.seek(0)
+    return buf
+
+# --- PDF generation ---
+def create_pdf(resume_text: str) -> BytesIO:
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=LETTER,
+                            leftMargin=40, rightMargin=40, topMargin=40, bottomMargin=40)
+    styles = getSampleStyleSheet()
+    story = []
+
+    header_style = ParagraphStyle(
+        name='Header',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=12,
+        spaceAfter=6
+    )
+    normal_style = styles['Normal']
+
+    headers = ["summary:", "skills:", "experience:", "education:", "certifications:"]
+
+    for line in resume_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            story.append(Spacer(1, 4))
+            continue
+        if any(stripped.lower().startswith(h) for h in headers):
+            story.append(Paragraph(stripped, header_style))
+        else:
+            story.append(Paragraph(stripped, normal_style))
+    doc.build(story)
     buf.seek(0)
     return buf
 
@@ -156,17 +193,17 @@ def create_docx(resume_text: str, filename="tailored_resume.docx") -> BytesIO:
 st.set_page_config(page_title="AI Resume Writer", layout="centered")
 st.title("AI Resume Writer — Tailor your résumé")
 
-# --- File upload ---
+# File upload
 uploaded_resume = st.file_uploader("Upload your résumé (PDF/DOCX/TXT)", type=['pdf', 'docx', 'txt'])
 uploaded_jd = st.file_uploader("Upload job description (PDF/DOCX/TXT)", type=['pdf', 'docx', 'txt'])
 
-# --- Tone selection MUST be defined BEFORE using it ---
+# Tone selection
 custom_tone = st.selectbox(
     "Tone for résumé",
     ["professional and concise", "friendly and conversational", "formal", "creative"]
 )
 
-# --- Generate résumé button ---
+# Generate résumé
 if st.button("Generate tailored résumé"):
     if not uploaded_resume or not uploaded_jd:
         st.error("Please upload both résumé and job description.")
@@ -186,11 +223,19 @@ if st.button("Generate tailored résumé"):
                 st.error(output)
             else:
                 st.success("Résumé generated!")
+                
                 # DOCX download
                 docx_buf = create_docx(output)
                 st.download_button("Download résumé as DOCX", docx_buf, file_name="tailored_resume.docx")
+                
+                # PDF download
+                pdf_buf = create_pdf(output)
+                st.download_button("Download résumé as PDF", pdf_buf, file_name="tailored_resume.pdf")
+                
+                # Preview
                 st.subheader("Résumé Preview")
                 st.code(output, language="text")
+
 
 st.markdown('---')
 st.markdown('**Privacy:** We dont hold any personal info.Uploaded files are sent to OpenAI only if you provide a key.')
