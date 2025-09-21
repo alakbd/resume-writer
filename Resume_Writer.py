@@ -59,10 +59,10 @@ CRITICAL GUIDELINES:
 4. Tone: Write in a {tone.lower()} tone.
 
 Candidate's current résumé:
-{resume_text[:3000]}  # Truncate very long resumes
+{resume_text}
 
 Job description:
-{job_text[:2000]}  # Truncate very long job descriptions
+{job_text}
 
 Generate ONLY the rewritten résumé with no explanations or commentary:
 """
@@ -189,36 +189,52 @@ def save_resume_pdf(resume_text: str, filename: str = "resume.pdf") -> str:
         bottomMargin=50
     )
     
-    # Create custom styles
+    # Create custom styles without conflicting with existing ones
     styles = getSampleStyleSheet()
     
-    # Add custom styles
-    styles.add(ParagraphStyle(
-        name='Body',
-        parent=styles['Normal'],
-        fontName=DEFAULT_FONT,
-        fontSize=DEFAULT_FONT_SIZE,
-        leading=DEFAULT_FONT_SIZE * LINE_SPACING,
-        spaceAfter=6
-    ))
-    
-    styles.add(ParagraphStyle(
-        name='Heading',
-        parent=styles['Heading2'],
-        fontName=f'{DEFAULT_FONT}-Bold',
-        fontSize=HEADING_FONT_SIZE,
-        textColor='#003366',  # Dark blue
-        spaceAfter=12,
-        spaceBefore=18
-    ))
-    
-    styles.add(ParagraphStyle(
-        name='Bullet',
-        parent=styles['Body'],
-        leftIndent=18,
-        bulletIndent=0,
-        spaceAfter=3
-    ))
+    # Create unique style names to avoid conflicts
+    resume_styles = {
+        'Body': ParagraphStyle(
+            name='ResumeBody',
+            parent=styles['Normal'],
+            fontName=DEFAULT_FONT,
+            fontSize=DEFAULT_FONT_SIZE,
+            leading=DEFAULT_FONT_SIZE * LINE_SPACING,
+            spaceAfter=6
+        ),
+        'Heading': ParagraphStyle(
+            name='ResumeHeading',
+            parent=styles['Heading2'],
+            fontName=f'{DEFAULT_FONT}-Bold',
+            fontSize=HEADING_FONT_SIZE,
+            textColor='#003366',  # Dark blue
+            spaceAfter=12,
+            spaceBefore=18
+        ),
+        'Bullet': ParagraphStyle(
+            name='ResumeBullet',
+            parent=styles['Normal'],
+            leftIndent=18,
+            bulletIndent=0,
+            spaceAfter=3
+        ),
+        'Title': ParagraphStyle(
+            name='ResumeTitle',
+            parent=styles['Heading1'],
+            fontName=f'{DEFAULT_FONT}-Bold',
+            fontSize=18,
+            alignment=TA_CENTER,
+            spaceAfter=12
+        ),
+        'Contact': ParagraphStyle(
+            name='ResumeContact',
+            parent=styles['Normal'],
+            alignment=TA_CENTER,
+            textColor='#666666',
+            fontSize=10,
+            spaceAfter=24
+        )
+    }
     
     # Extract candidate name
     candidate_name = extract_name(resume_text)
@@ -227,26 +243,10 @@ def save_resume_pdf(resume_text: str, filename: str = "resume.pdf") -> str:
     story = []
     
     # Add title (candidate name)
-    title_style = ParagraphStyle(
-        name='Title',
-        parent=styles['Heading1'],
-        fontName=f'{DEFAULT_FONT}-Bold',
-        fontSize=18,
-        alignment=TA_CENTER,
-        spaceAfter=12
-    )
-    story.append(Paragraph(candidate_name, title_style))
+    story.append(Paragraph(candidate_name, resume_styles['Title']))
     
     # Add contact information
-    contact_style = ParagraphStyle(
-        name='Contact',
-        parent=styles['Body'],
-        alignment=TA_CENTER,
-        textColor='#666666',
-        fontSize=10,
-        spaceAfter=24
-    )
-    story.append(Paragraph("Phone: | Email: | LinkedIn: | Location:", contact_style))
+    story.append(Paragraph("Phone: | Email: | LinkedIn: | Location:", resume_styles['Contact']))
     
     # Process content
     lines = resume_text.split("\n")
@@ -260,16 +260,16 @@ def save_resume_pdf(resume_text: str, filename: str = "resume.pdf") -> str:
         # Detect section headers
         if re.match(r'^(PROFESSIONAL SUMMARY|EXPERIENCE|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS)$', line, re.IGNORECASE):
             current_section = line.upper()
-            story.append(Paragraph(current_section, styles['Heading']))
+            story.append(Paragraph(current_section, resume_styles['Heading']))
             
         # Process bullet points
         elif current_section == "EXPERIENCE" and (line.startswith('-') or line.startswith('•') or line.startswith('*')):
             bullet_text = re.sub(r'^[-•*]\s*', '', line)
-            story.append(Paragraph(f"• {bullet_text}", styles['Bullet']))
+            story.append(Paragraph(f"• {bullet_text}", resume_styles['Bullet']))
             
         # Process regular content
         else:
-            story.append(Paragraph(line, styles['Body']))
+            story.append(Paragraph(line, resume_styles['Body']))
     
     doc.build(story)
     return filename
@@ -341,6 +341,8 @@ def main():
     
     # File processing function
     def read_file(file) -> str:
+        if file is None:
+            return ""
         if file.name.endswith(".txt"):
             return file.read().decode("utf-8")
         elif file.name.endswith(".docx"):
@@ -390,26 +392,32 @@ def main():
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    docx_file = save_resume_docx(output, f"{tmpdir}/resume.docx")
-                    with open(docx_file, "rb") as f:
-                        st.download_button(
-                            "📝 Download Word Document", 
-                            f, 
-                            file_name="tailored_resume.docx",
-                            help="Download in Microsoft Word format for further editing",
-                            use_container_width=True
-                        )
+                    try:
+                        docx_file = save_resume_docx(output, f"{tmpdir}/resume.docx")
+                        with open(docx_file, "rb") as f:
+                            st.download_button(
+                                "📝 Download Word Document", 
+                                f, 
+                                file_name="tailored_resume.docx",
+                                help="Download in Microsoft Word format for further editing",
+                                use_container_width=True
+                            )
+                    except Exception as e:
+                        st.error(f"Error creating Word document: {str(e)}")
                 
                 with col2:
-                    pdf_file = save_resume_pdf(output, f"{tmpdir}/resume.pdf")
-                    with open(pdf_file, "rb") as f:
-                        st.download_button(
-                            "📄 Download PDF", 
-                            f, 
-                            file_name="tailored_resume.pdf",
-                            help="Download in PDF format for easy sharing",
-                            use_container_width=True
-                        )
+                    try:
+                        pdf_file = save_resume_pdf(output, f"{tmpdir}/resume.pdf")
+                        with open(pdf_file, "rb") as f:
+                            st.download_button(
+                                "📄 Download PDF", 
+                                f, 
+                                file_name="tailored_resume.pdf",
+                                help="Download in PDF format for easy sharing",
+                                use_container_width=True
+                            )
+                    except Exception as e:
+                        st.error(f"Error creating PDF document: {str(e)}")
 
 if __name__ == "__main__":
     main()
