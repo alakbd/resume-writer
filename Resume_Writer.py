@@ -6,7 +6,7 @@
 
 """
 Enhanced Resume Writer with Professional DOCX & PDF Export
-Optimized for ATS with improved formatting and user experience
+Includes sample preview feature for demonstration
 """
 
 import streamlit as st
@@ -33,6 +33,72 @@ try:
 except ImportError:
     PDF_SUPPORT = False
     st.warning("PDF support requires PyPDF2. Install with: pip install PyPDF2")
+
+# -------- Sample Data --------
+SAMPLE_CV = """
+John Doe
+Email: john.doe@example.com | Phone: (555) 123-4567 | LinkedIn: linkedin.com/in/johndoe
+
+PROFESSIONAL SUMMARY
+Software Engineer with 5+ years of experience in full-stack development. Specialized in JavaScript, Python, and cloud technologies. Proven track record of delivering scalable web applications and improving system performance.
+
+EXPERIENCE
+Senior Software Engineer, Tech Solutions Inc. (2020-Present)
+- Developed and maintained responsive web applications using React.js and Node.js
+- Led a team of 4 developers to deliver a customer portal that increased user engagement by 35%
+- Implemented CI/CD pipelines reducing deployment time by 40%
+- Optimized database queries, improving application performance by 25%
+
+Software Developer, Innovate Labs (2018-2020)
+- Built RESTful APIs using Python and Django framework
+- Collaborated with UX designers to implement user-friendly interfaces
+- Reduced server costs by 20% through code optimization and caching strategies
+
+EDUCATION
+Bachelor of Science in Computer Science
+University of Technology, Graduated 2018
+
+SKILLS
+- Programming Languages: JavaScript, Python, Java, SQL
+- Frameworks: React, Node.js, Django, Express.js
+- Tools: Git, Docker, AWS, Jenkins, MongoDB
+- Certifications: AWS Certified Developer, Scrum Master
+"""
+
+SAMPLE_JOB_DESCRIPTION = """
+Senior Full Stack Developer Position
+
+We are looking for an experienced Senior Full Stack Developer to join our dynamic team. The ideal candidate will have a strong background in both front-end and back-end development, with expertise in modern JavaScript frameworks and cloud technologies.
+
+Responsibilities:
+- Design, develop, and maintain scalable web applications
+- Collaborate with cross-functional teams to define, design, and ship new features
+- Write clean, maintainable, and efficient code
+- Implement security and data protection measures
+- Optimize applications for maximum speed and scalability
+- Mentor junior developers and conduct code reviews
+
+Requirements:
+- 5+ years of experience in full-stack development
+- Proficiency with JavaScript frameworks (React, Angular, or Vue)
+- Strong experience with Node.js and Python
+- Familiarity with database technology such as MongoDB and PostgreSQL
+- Experience with cloud services (AWS, Azure, or GCP)
+- Knowledge of code versioning tools, such as Git
+- Excellent problem-solving skills and attention to detail
+
+Preferred Qualifications:
+- Experience with containerization technologies (Docker, Kubernetes)
+- Familiarity with CI/CD pipelines
+- Understanding of agile methodologies
+- Bachelor's degree in Computer Science or related field
+
+Benefits:
+- Competitive salary and performance bonuses
+- Comprehensive health insurance
+- Flexible working hours and remote work options
+- Professional development opportunities
+"""
 
 # -------- Configuration --------
 DEFAULT_FONT = "Helvetica"
@@ -273,6 +339,69 @@ def save_resume_pdf(resume_text: str, filename: str = "resume.pdf") -> str:
     doc.build(story)
     return filename
 
+# -------- Sample Preview Function --------
+def show_sample_preview():
+    """Display a sample preview of how the app works."""
+    st.subheader("🎯 Sample Preview")
+    st.info("See how the app works with our sample data. No uploads required!")
+    
+    # Show sample data in expandable sections
+    with st.expander("View Sample CV"):
+        st.text(SAMPLE_CV)
+    
+    with st.expander("View Sample Job Description"):
+        st.text(SAMPLE_JOB_DESCRIPTION)
+    
+    # Add a button to generate sample output
+    if st.button("🔄 Generate Sample Resume", key="sample_generate"):
+        with st.spinner("Generating sample resume..."):
+            # Build prompt and call OpenAI
+            prompt = build_prompt(SAMPLE_CV, SAMPLE_JOB_DESCRIPTION, tone="Professional")
+            api_key_input = os.getenv("OPENAI_API_KEY")
+            
+            if not api_key_input:
+                st.error("OpenAI API key not configured. Sample generation requires a valid API key.")
+                return
+                
+            output = call_openai_chat(prompt, api_key_input)
+            
+            # Check for errors in API response
+            if output.startswith("Error:"):
+                st.error(f"Sample generation failed: {output}")
+                return
+            
+            # Display generated resume
+            st.subheader("📋 Sample Generated Résumé")
+            st.text_area("", output, height=400, label_visibility="collapsed", key="sample_output")
+            
+            # Create download buttons for sample
+            with tempfile.TemporaryDirectory() as tmpdir:
+                try:
+                    docx_file = save_resume_docx(output, f"{tmpdir}/sample_resume.docx")
+                    with open(docx_file, "rb") as f:
+                        st.download_button(
+                            "📝 Download Sample Word Document", 
+                            f, 
+                            file_name="sample_resume.docx",
+                            help="Download sample in Microsoft Word format",
+                            key="sample_docx"
+                        )
+                except Exception as e:
+                    st.error(f"Error creating sample Word document: {str(e)}")
+                
+                try:
+                    pdf_file = save_resume_pdf(output, f"{tmpdir}/sample_resume.pdf")
+                    with open(pdf_file, "rb") as f:
+                        st.download_button(
+                            "📄 Download Sample PDF", 
+                            f, 
+                            file_name="sample_resume.pdf",
+                            help="Download sample in PDF format",
+                            key="sample_pdf"
+                        )
+                except Exception as e:
+                    st.error(f"Error creating sample PDF document: {str(e)}")
+
 # -------- Improved Streamlit UI --------
 def main():
     st.set_page_config(
@@ -307,6 +436,12 @@ def main():
     # Main content area
     st.title("📄 Professional Résumé Writer")
     st.markdown("Transform your résumé into an **ATS-optimized**, job-tailored document that gets noticed.")
+    
+    # Show sample preview section
+    show_sample_preview()
+    
+    st.markdown("---")
+    st.subheader("🚀 Create Your Own Tailored Résumé")
     
     # API key handling
     api_key_input = os.getenv("OPENAI_API_KEY")
