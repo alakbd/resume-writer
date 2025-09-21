@@ -5,183 +5,414 @@
 
 
 """
-Resume Writer with Enhanced DOCX & PDF Export
-Highlights Name, Sections, Bullets, and Achievements.
+Enhanced Resume Writer with Professional DOCX & PDF Export
+Optimized for ATS with improved formatting and user experience
 """
 
 import streamlit as st
 import openai
 import os
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 import tempfile
+import re
+import time
+from typing import Tuple, Optional
 
-# -------- Build Prompt --------
-def build_prompt(resume_text, job_text, tone="Professional"):
-    """Prompt for ATS-optimized, job-aligned résumé using GPT-3.5 (no explanations)."""
+# -------- Configuration --------
+DEFAULT_FONT = "Helvetica"
+DEFAULT_FONT_SIZE = 11
+HEADING_FONT_SIZE = 14
+LINE_SPACING = 1.2
+
+# -------- Enhanced Prompt Engineering --------
+def build_prompt(resume_text: str, job_text: str, tone: str = "Professional") -> str:
+    """Enhanced prompt for ATS-optimized, job-aligned résumé."""
     prompt = f"""
-You are a professional résumé writer. Rewrite the candidate's résumé so it is tailored 
-to the job description and optimized for Applicant Tracking Systems (ATS).
+You are an expert professional résumé writer with deep knowledge of Applicant Tracking Systems (ATS). 
+Rewrite the candidate's résumé to maximize their chances for the specific job while maintaining truthfulness.
 
-Guidelines:
-- Focus on aligning résumé with the job description: emphasize relevant experience, skills, and achievements.
-- Keep only relevant roles in detail. Summarize or remove unrelated/older experiences.
-- Optimize for ATS: naturally include important keywords from the job description.
-- Keep formatting simple and ATS-friendly: 
-  * Use plain section headers (Summary, Experience, Education, Skills, Certifications).
-  * Use bullet points for achievements.
-  * Avoid tables, text boxes, or columns.
-- Write in a {tone} tone.
-- Limit the résumé to 1–2 pages maximum.
-- Output only the final résumé. Do not add explanations or commentary.
+CRITICAL GUIDELINES:
+1. Job Alignment: 
+   - Extract key skills, technologies, and requirements from the job description
+   - Mirror the language and terminology used in the job description
+   - Prioritize relevant experience and quantify achievements with metrics where possible
+
+2. ATS Optimization:
+   - Include relevant keywords from the job description naturally
+   - Use standard section headers (Professional Summary, Experience, Education, Skills, Certifications)
+   - Use bullet points for achievements with action verbs (Managed, Developed, Increased, Reduced)
+   - Avoid tables, columns, graphics, or unusual formatting
+
+3. Content Structure:
+   - Professional Summary: 3-4 lines highlighting most relevant qualifications
+   - Experience: Focus on last 10-15 years, emphasize relevant roles
+   - Skills: Categorize (Technical, Soft, Certifications) and match job requirements
+   - Keep to 1-2 pages maximum
+
+4. Tone: Write in a {tone.lower()} tone.
 
 Candidate's current résumé:
-{resume_text}
+{resume_text[:3000]}  # Truncate very long resumes
 
 Job description:
-{job_text}
+{job_text[:2000]}  # Truncate very long job descriptions
 
-Now return ONLY the rewritten résumé, nothing else:
+Generate ONLY the rewritten résumé with no explanations or commentary:
 """
     return prompt
 
-# -------- Call OpenAI GPT-3.5 --------
-def call_openai_chat(prompt: str, api_key: str) -> str:
-    """Call OpenAI GPT-3.5-turbo for résumé generation."""
+# -------- Robust OpenAI API Call --------
+def call_openai_chat(prompt: str, api_key: str, max_retries: int = 3) -> str:
+    """Enhanced OpenAI API call with retry logic and better error handling."""
     openai.api_key = api_key
-    try:
-        response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": prompt}],
-            temperature=0.3,
-            max_tokens=2000
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"(OpenAI API error) {e}"
+    for attempt in range(max_retries):
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional resume writer specializing in ATS optimization."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=2500
+            )
+            return response.choices[0].message.content.strip()
+        except openai.error.RateLimitError:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff
+                st.warning(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                return "Error: OpenAI API rate limit exceeded. Please try again later."
+        except openai.error.AuthenticationError:
+            return "Error: Invalid API key. Please check your OpenAI API credentials."
+        except openai.error.InvalidRequestError as e:
+            return f"Error: Invalid request to OpenAI API: {str(e)}"
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(1)
+            else:
+                return f"Error: Failed to generate resume after {max_retries} attempts. {str(e)}"
+    return "Error: Unexpected error occurred during resume generation."
 
-# -------- Word Template --------
-def save_resume_docx(resume_text, filename="resume.docx"):
-    """Save AI-generated resume into a styled Word document."""
+# -------- Extract Name for Personalized Resume --------
+def extract_name(resume_text: str) -> Optional[str]:
+    """Attempt to extract the candidate's name from resume text."""
+    # Look for patterns that might indicate a name at the beginning
+    lines = resume_text.strip().split('\n')
+    if lines:
+        first_line = lines[0].strip()
+        # Simple heuristic: if it looks like a name (Title case, 2-3 words)
+        if first_line and first_line.istitle() and 1 <= len(first_line.split()) <= 3:
+            return first_line
+    return "Candidate Name"
+
+# -------- Enhanced Word Document Generation --------
+def save_resume_docx(resume_text: str, filename: str = "resume.docx") -> str:
+    """Create a professionally formatted Word document with improved styling."""
     doc = Document()
-    doc.add_paragraph("Candidate Name", style="Title")  # Placeholder name
-
+    
+    # Set default font for the document
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Calibri'
+    font.size = Pt(DEFAULT_FONT_SIZE)
+    
+    # Extract and add name as title
+    candidate_name = extract_name(resume_text)
+    title = doc.add_paragraph(candidate_name)
+    title.style = doc.styles['Title']
+    title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    
+    # Add contact information placeholder
+    contact = doc.add_paragraph("Phone: | Email: | LinkedIn: | Location:")
+    contact.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    for run in contact.runs:
+        run.font.color.rgb = RGBColor(100, 100, 100)
+        run.font.size = Pt(10)
+    
+    doc.add_paragraph()  # Add spacing
+    
+    # Process resume content
     lines = resume_text.split("\n")
     current_section = None
-
+    
     for line in lines:
         line = line.strip()
         if not line:
             continue
-
-        if line.lower() in ["summary", "experience", "education", "skills", "certifications"]:
-            current_section = line
-            para = doc.add_paragraph(line.upper())
-            run = para.runs[0]
+            
+        # Detect section headers
+        if re.match(r'^(PROFESSIONAL SUMMARY|EXPERIENCE|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS)$', line, re.IGNORECASE):
+            current_section = line.upper()
+            
+            # Add section header
+            para = doc.add_paragraph()
+            run = para.add_run(current_section)
             run.bold = True
-            run.font.size = Pt(14)
-            para.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
-            doc.add_paragraph("")  # spacing
+            run.font.size = Pt(HEADING_FONT_SIZE)
+            run.font.color.rgb = RGBColor(0, 51, 102)  # Dark blue
+            para.paragraph_format.space_after = Pt(6)
+            para.paragraph_format.space_before = Pt(12)
+            
+        # Process bullet points (especially in experience section)
+        elif current_section == "EXPERIENCE" and (line.startswith('-') or line.startswith('•') or line.startswith('*')):
+            bullet_text = re.sub(r'^[-•*]\s*', '', line)  # Remove bullet characters
+            para = doc.add_paragraph(bullet_text, style='List Bullet')
+            para.paragraph_format.space_after = Pt(3)
+            para.paragraph_format.left_indent = Pt(18)
+            
+        # Process regular content
         else:
-            if current_section == "experience" and line.startswith("-"):
-                para = doc.add_paragraph(line[1:].strip(), style="List Bullet")
-                para.runs[0].font.size = Pt(11)
-            else:
-                para = doc.add_paragraph(line)
-                para.runs[0].font.size = Pt(11)
-
+            para = doc.add_paragraph(line)
+            para.paragraph_format.space_after = Pt(3)
+    
     doc.save(filename)
     return filename
 
-# -------- PDF Template --------
-def save_resume_pdf(resume_text, filename="resume.pdf"):
-    """Save AI-generated resume into a styled PDF document."""
-    doc = SimpleDocTemplate(filename, pagesize=A4, rightMargin=50, leftMargin=50, topMargin=50, bottomMargin=50)
+# -------- Enhanced PDF Generation --------
+def save_resume_pdf(resume_text: str, filename: str = "resume.pdf") -> str:
+    """Create a professionally formatted PDF with improved styling."""
+    doc = SimpleDocTemplate(
+        filename, 
+        pagesize=A4,
+        rightMargin=50, 
+        leftMargin=50, 
+        topMargin=50, 
+        bottomMargin=50
+    )
+    
+    # Create custom styles
     styles = getSampleStyleSheet()
+    
+    # Add custom styles
+    styles.add(ParagraphStyle(
+        name='Body',
+        parent=styles['Normal'],
+        fontName=DEFAULT_FONT,
+        fontSize=DEFAULT_FONT_SIZE,
+        leading=DEFAULT_FONT_SIZE * LINE_SPACING,
+        spaceAfter=6
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='Heading',
+        parent=styles['Heading2'],
+        fontName=f'{DEFAULT_FONT}-Bold',
+        fontSize=HEADING_FONT_SIZE,
+        textColor='#003366',  # Dark blue
+        spaceAfter=12,
+        spaceBefore=18
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='Bullet',
+        parent=styles['Body'],
+        leftIndent=18,
+        bulletIndent=0,
+        spaceAfter=3
+    ))
+    
+    # Extract candidate name
+    candidate_name = extract_name(resume_text)
+    
+    # Build story
     story = []
-
+    
+    # Add title (candidate name)
+    title_style = ParagraphStyle(
+        name='Title',
+        parent=styles['Heading1'],
+        fontName=f'{DEFAULT_FONT}-Bold',
+        fontSize=18,
+        alignment=TA_CENTER,
+        spaceAfter=12
+    )
+    story.append(Paragraph(candidate_name, title_style))
+    
+    # Add contact information
+    contact_style = ParagraphStyle(
+        name='Contact',
+        parent=styles['Body'],
+        alignment=TA_CENTER,
+        textColor='#666666',
+        fontSize=10,
+        spaceAfter=24
+    )
+    story.append(Paragraph("Phone: | Email: | LinkedIn: | Location:", contact_style))
+    
+    # Process content
     lines = resume_text.split("\n")
     current_section = None
-
+    
     for line in lines:
         line = line.strip()
         if not line:
             continue
-
-        if line.lower() in ["summary", "experience", "education", "skills", "certifications"]:
-            current_section = line
-            story.append(Spacer(1, 0.2 * inch))
-            story.append(Paragraph(f"<b>{line.upper()}</b>", styles["Heading2"]))
+            
+        # Detect section headers
+        if re.match(r'^(PROFESSIONAL SUMMARY|EXPERIENCE|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS)$', line, re.IGNORECASE):
+            current_section = line.upper()
+            story.append(Paragraph(current_section, styles['Heading']))
+            
+        # Process bullet points
+        elif current_section == "EXPERIENCE" and (line.startswith('-') or line.startswith('•') or line.startswith('*')):
+            bullet_text = re.sub(r'^[-•*]\s*', '', line)
+            story.append(Paragraph(f"• {bullet_text}", styles['Bullet']))
+            
+        # Process regular content
         else:
-            if current_section == "experience" and line.startswith("-"):
-                story.append(Paragraph("• " + line[1:].strip(), styles["Normal"]))
-            else:
-                story.append(Paragraph(line, styles["Normal"]))
-
+            story.append(Paragraph(line, styles['Body']))
+    
     doc.build(story)
     return filename
 
-# -------- Streamlit UI --------
+# -------- Improved Streamlit UI --------
 def main():
-    st.set_page_config(page_title="Résumé Writer", layout="centered")
-    st.title("📄 Résumé Writer")
-    st.write("Upload your résumé and job description to generate an ATS-optimized, job-aligned résumé.")
-
-    # Server-side API key
+    st.set_page_config(
+        page_title="Professional Résumé Writer", 
+        page_icon="📄", 
+        layout="centered",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Sidebar for instructions and information
+    with st.sidebar:
+        st.title("ℹ️ Instructions")
+        st.info("""
+        1. Upload your current résumé (TXT or DOCX)
+        2. Upload the job description (TXT or DOCX)
+        3. Select your preferred tone
+        4. Click 'Generate Tailored Résumé'
+        5. Download your enhanced résumé in Word or PDF format
+        """)
+        
+        st.title("🔒 Privacy Notice")
+        st.caption("""
+        - Your documents are processed securely
+        - Files are sent to OpenAI only for résumé generation
+        - No data is stored on our servers after processing
+        - Always review generated content for accuracy
+        """)
+    
+    # Main content area
+    st.title("📄 Professional Résumé Writer")
+    st.markdown("Transform your résumé into an **ATS-optimized**, job-tailored document that gets noticed.")
+    
+    # API key handling
     api_key_input = os.getenv("OPENAI_API_KEY")
     if not api_key_input:
-        st.error("Server-side OpenAI API key not found. Set OPENAI_API_KEY in environment.")
-        return
-
-    resume_file = st.file_uploader("Upload your Résumé (TXT, DOCX)", type=["txt", "docx"])
-    job_file = st.file_uploader("Upload Job Description (TXT, DOCX)", type=["txt", "docx"])
-    tone = st.selectbox("Choose Résumé Tone", ["Professional", "Concise", "Impactful", "Leadership"])
-
-    if st.button("Generate Tailored Résumé"):
-        if not resume_file or not job_file:
-            st.error("Please upload both résumé and job description.")
-            return
-
-        def read_file(file):
-            if file.name.endswith(".txt"):
-                return file.read().decode("utf-8")
-            elif file.name.endswith(".docx"):
+        st.error("OpenAI API key not configured. Please set the OPENAI_API_KEY environment variable.")
+        st.stop()
+    
+    # File upload with better UX
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        resume_file = st.file_uploader(
+            "Upload Your Résumé", 
+            type=["txt", "docx"],
+            help="Upload your current résumé in TXT or DOCX format"
+        )
+        
+    with col2:
+        job_file = st.file_uploader(
+            "Upload Job Description", 
+            type=["txt", "docx"],
+            help="Upload the job description you're applying for"
+        )
+    
+    # Additional options
+    tone = st.selectbox(
+        "Select Tone", 
+        ["Professional", "Concise", "Achievement-Oriented", "Leadership-Focused"],
+        help="Choose the writing style for your résumé"
+    )
+    
+    # Add a preview option
+    show_preview = st.checkbox("Show formatted preview before downloading")
+    
+    # File processing function
+    def read_file(file) -> str:
+        if file.name.endswith(".txt"):
+            return file.read().decode("utf-8")
+        elif file.name.endswith(".docx"):
+            try:
                 doc = Document(file)
-                return "\n".join([para.text for para in doc.paragraphs])
-            return ""
-
-        resume_text = read_file(resume_file)
-        job_text = read_file(job_file)
-
-        # Generate prompt and call AI
-        prompt = build_prompt(resume_text, job_text, tone=tone)
-        output = call_openai_chat(prompt, api_key_input)
-
-        st.subheader("✨ Tailored Résumé")
-        st.text_area("Generated Résumé", output, height=400)
-
-        # Save Word & PDF
-        with tempfile.TemporaryDirectory() as tmpdir:
-            docx_file = save_resume_docx(output, f"{tmpdir}/resume.docx")
-            pdf_file = save_resume_pdf(output, f"{tmpdir}/resume.pdf")
-
-            with open(docx_file, "rb") as f:
-                st.download_button("📄 Download Word (.docx)", f, file_name="resume.docx")
-
-            with open(pdf_file, "rb") as f:
-                st.download_button("📑 Download PDF", f, file_name="resume.pdf")
+                return "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+            except Exception as e:
+                st.error(f"Error reading DOCX file: {str(e)}")
+                return ""
+        return ""
+    
+    # Generate button with improved feedback
+    if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True):
+        if not resume_file or not job_file:
+            st.error("Please upload both your résumé and the job description.")
+            st.stop()
+        
+        with st.spinner("Analyzing your documents and generating optimized résumé..."):
+            resume_text = read_file(resume_file)
+            job_text = read_file(job_file)
+            
+            if not resume_text or not job_text:
+                st.error("Could not extract text from uploaded files. Please try again with different files.")
+                st.stop()
+            
+            # Build prompt and call OpenAI
+            prompt = build_prompt(resume_text, job_text, tone=tone)
+            output = call_openai_chat(prompt, api_key_input)
+            
+            # Check for errors in API response
+            if output.startswith("Error:"):
+                st.error(output)
+                st.stop()
+            
+            # Display success message
+            st.success("Résumé successfully generated!")
+            
+            # Display generated resume
+            st.subheader("📋 Generated Résumé Preview")
+            st.text_area("", output, height=400, label_visibility="collapsed")
+            
+            # Create download buttons
+            with tempfile.TemporaryDirectory() as tmpdir:
+                if show_preview:
+                    st.info("Review your résumé above before downloading.")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    docx_file = save_resume_docx(output, f"{tmpdir}/resume.docx")
+                    with open(docx_file, "rb") as f:
+                        st.download_button(
+                            "📝 Download Word Document", 
+                            f, 
+                            file_name="tailored_resume.docx",
+                            help="Download in Microsoft Word format for further editing",
+                            use_container_width=True
+                        )
+                
+                with col2:
+                    pdf_file = save_resume_pdf(output, f"{tmpdir}/resume.pdf")
+                    with open(pdf_file, "rb") as f:
+                        st.download_button(
+                            "📄 Download PDF", 
+                            f, 
+                            file_name="tailored_resume.pdf",
+                            help="Download in PDF format for easy sharing",
+                            use_container_width=True
+                        )
 
 if __name__ == "__main__":
     main()
-
-
-st.markdown('---')
-st.markdown('**Privacy:** We dont hold any personal info.Uploaded files are sent to OpenAI only if you provide a key.')
 
 
 # In[ ]:
