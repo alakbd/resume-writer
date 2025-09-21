@@ -25,6 +25,15 @@ import re
 import time
 from typing import Tuple, Optional
 
+# Import for PDF text extraction
+try:
+    import PyPDF2
+    from io import BytesIO
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
+    st.warning("PDF support requires PyPDF2. Install with: pip install PyPDF2")
+
 # -------- Configuration --------
 DEFAULT_FONT = "Helvetica"
 DEFAULT_FONT_SIZE = 11
@@ -102,17 +111,25 @@ def call_openai_chat(prompt: str, api_key: str, max_retries: int = 3) -> str:
                 return f"Error: Failed to generate resume after {max_retries} attempts. {str(e)}"
     return "Error: Unexpected error occurred during resume generation."
 
-# -------- Extract Name for Personalized Resume --------
-def extract_name(resume_text: str) -> Optional[str]:
-    """Attempt to extract the candidate's name from resume text."""
-    # Look for patterns that might indicate a name at the beginning
-    lines = resume_text.strip().split('\n')
-    if lines:
-        first_line = lines[0].strip()
-        # Simple heuristic: if it looks like a name (Title case, 2-3 words)
-        if first_line and first_line.istitle() and 1 <= len(first_line.split()) <= 3:
-            return first_line
-    return "Candidate Name"
+# -------- Always return "Curricula Vitae" --------
+def extract_name(resume_text: str) -> str:
+    """Return 'Curricula Vitae' as the title for all resumes."""
+    return "Curricula Vitae"
+
+# -------- PDF Text Extraction --------
+def extract_text_from_pdf(file) -> str:
+    """Extract text content from a PDF file."""
+    if not PDF_SUPPORT:
+        return "Error: PDF support not available. Please install PyPDF2."
+    
+    try:
+        pdf_reader = PyPDF2.PdfReader(file)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+        return text
+    except Exception as e:
+        return f"Error reading PDF: {str(e)}"
 
 # -------- Enhanced Word Document Generation --------
 def save_resume_docx(resume_text: str, filename: str = "resume.docx") -> str:
@@ -125,18 +142,11 @@ def save_resume_docx(resume_text: str, filename: str = "resume.docx") -> str:
     font.name = 'Calibri'
     font.size = Pt(DEFAULT_FONT_SIZE)
     
-    # Extract and add name as title
+    # Add title
     candidate_name = extract_name(resume_text)
     title = doc.add_paragraph(candidate_name)
     title.style = doc.styles['Title']
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-    
-    # Add contact information placeholder
-    contact = doc.add_paragraph("Phone: | Email: | LinkedIn: | Location:")
-    contact.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-    for run in contact.runs:
-        run.font.color.rgb = RGBColor(100, 100, 100)
-        run.font.size = Pt(10)
     
     doc.add_paragraph()  # Add spacing
     
@@ -225,14 +235,6 @@ def save_resume_pdf(resume_text: str, filename: str = "resume.pdf") -> str:
             fontSize=18,
             alignment=TA_CENTER,
             spaceAfter=12
-        ),
-        'Contact': ParagraphStyle(
-            name='ResumeContact',
-            parent=styles['Normal'],
-            alignment=TA_CENTER,
-            textColor='#666666',
-            fontSize=10,
-            spaceAfter=24
         )
     }
     
@@ -242,11 +244,8 @@ def save_resume_pdf(resume_text: str, filename: str = "resume.pdf") -> str:
     # Build story
     story = []
     
-    # Add title (candidate name)
+    # Add title
     story.append(Paragraph(candidate_name, resume_styles['Title']))
-    
-    # Add contact information
-    story.append(Paragraph("Phone: | Email: | LinkedIn: | Location:", resume_styles['Contact']))
     
     # Process content
     lines = resume_text.split("\n")
@@ -287,12 +286,15 @@ def main():
     with st.sidebar:
         st.title("ℹ️ Instructions")
         st.info("""
-        1. Upload your current résumé (TXT or DOCX)
-        2. Upload the job description (TXT or DOCX)
+        1. Upload your current résumé (TXT, DOCX, or PDF)
+        2. Upload the job description (TXT, DOCX, or PDF)
         3. Select your preferred tone
         4. Click 'Generate Tailored Résumé'
         5. Download your enhanced résumé in Word or PDF format
         """)
+        
+        if not PDF_SUPPORT:
+            st.warning("PDF file support requires PyPDF2. Install with: pip install PyPDF2")
         
         st.title("🔒 Privacy Notice")
         st.caption("""
@@ -318,14 +320,14 @@ def main():
     with col1:
         resume_file = st.file_uploader(
             "Upload Your Résumé", 
-            type=["txt", "docx"],
-            help="Upload your current résumé in TXT or DOCX format"
+            type=["txt", "docx", "pdf"],
+            help="Upload your current résumé in TXT, DOCX, or PDF format"
         )
         
     with col2:
         job_file = st.file_uploader(
             "Upload Job Description", 
-            type=["txt", "docx"],
+            type=["txt", "docx", "pdf"],
             help="Upload the job description you're applying for"
         )
     
@@ -352,6 +354,12 @@ def main():
             except Exception as e:
                 st.error(f"Error reading DOCX file: {str(e)}")
                 return ""
+        elif file.name.endswith(".pdf"):
+            if not PDF_SUPPORT:
+                return "Error: PDF support not available. Please install PyPDF2."
+            # Reset file pointer to beginning
+            file.seek(0)
+            return extract_text_from_pdf(file)
         return ""
     
     # Generate button with improved feedback
@@ -366,6 +374,11 @@ def main():
             
             if not resume_text or not job_text:
                 st.error("Could not extract text from uploaded files. Please try again with different files.")
+                st.stop()
+            
+            # Check for PDF extraction errors
+            if resume_text.startswith("Error:") or job_text.startswith("Error:"):
+                st.error(f"Error processing files: {resume_text if resume_text.startswith('Error:') else job_text}")
                 st.stop()
             
             # Build prompt and call OpenAI
@@ -421,7 +434,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 # In[ ]:
 
