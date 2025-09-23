@@ -428,7 +428,6 @@ def main():
         st.title("🔒 Privacy Notice")
         st.caption("""
         - Your documents are processed securely
-        - Files are sent to OpenAI only for résumé generation
         - No data is stored on our servers after processing
         - Always review generated content for accuracy
         """)
