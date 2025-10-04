@@ -456,55 +456,56 @@ def main():
         st.stop()
     
     # File upload with better UX
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        resume_file = st.file_uploader(
-            "Upload Your Résumé", 
-            type=["txt", "docx", "pdf"],
-            help="Upload your current résumé in TXT, DOCX, or PDF format"
-        )
-        
-    with col2:
-        job_file = st.file_uploader(
-            "Upload Job Description", 
-            type=["txt", "docx", "pdf"],
-            help="Upload the job description you're applying for"
-        )
-    
-    # Additional options
-    tone = st.selectbox(
-        "Select Tone", 
-        ["Professional", "Concise", "Achievement-Oriented", "Leadership-Focused"],
-        help="Choose the writing style for your résumé"
+
+      # File upload with better UX - MOVE THIS BEFORE THE BUTTON
+col1, col2 = st.columns(2)
+
+with col1:
+    resume_file = st.file_uploader(
+        "Upload Your Résumé", 
+        type=["txt", "docx", "pdf"],
+        help="Upload your current résumé in TXT, DOCX, or PDF format"
     )
     
-    # Add a preview option
-    show_preview = st.checkbox("Show formatted preview before downloading")
-    
-    # File processing function
-    def read_file(file) -> str:
-        if file is None:
-            return ""
-        if file.name.endswith(".txt"):
-            return file.read().decode("utf-8")
-        elif file.name.endswith(".docx"):
-            try:
-                doc = Document(file)
-                return "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
-            except Exception as e:
-                st.error(f"Error reading DOCX file: {str(e)}")
-                return ""
-        elif file.name.endswith(".pdf"):
-            if not PDF_SUPPORT:
-                return "Error: PDF support not available. Please install PyPDF2."
-            # Reset file pointer to beginning
-            file.seek(0)
-            return extract_text_from_pdf(file)
+with col2:
+    job_file = st.file_uploader(
+        "Upload Job Description", 
+        type=["txt", "docx", "pdf"],
+        help="Upload the job description you're applying for"
+    )
+
+# Additional options
+tone = st.selectbox(
+    "Select Tone", 
+    ["Professional", "Concise", "Achievement-Oriented", "Leadership-Focused"],
+    help="Choose the writing style for your résumé"
+)
+
+# Add a preview option
+show_preview = st.checkbox("Show formatted preview before downloading")
+
+# File processing function
+def read_file(file) -> str:
+    if file is None:
         return ""
-    
-    # Add hidden button for Android app to trigger
-    # Add hidden button for Android app to trigger
+    if file.name.endswith(".txt"):
+        return file.read().decode("utf-8")
+    elif file.name.endswith(".docx"):
+        try:
+            doc = Document(file)
+            return "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+        except Exception as e:
+            st.error(f"Error reading DOCX file: {str(e)}")
+            return ""
+    elif file.name.endswith(".pdf"):
+        if not PDF_SUPPORT:
+            return "Error: PDF support not available. Please install PyPDF2."
+        # Reset file pointer to beginning
+        file.seek(0)
+        return extract_text_from_pdf(file)
+    return ""
+
+# Add hidden button for Android app to trigger
 st.markdown("""
 <button id="tailorResumeButton" style="display: none;" onclick="handleResumeGeneration()">
     Generate Resume
@@ -558,85 +559,86 @@ st.markdown("""
 
 # Generate button with improved feedback and JS injection
 if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True, key="tailorResumeButton"):
+    # NOW resume_file and job_file are defined and accessible
     if not resume_file or not job_file:
         st.error("Please upload both your résumé and the job description.")
         st.stop()
+    
+    with st.spinner("Analyzing your documents and generating optimized résumé..."):
+        resume_text = read_file(resume_file)
+        job_text = read_file(job_file)
         
-        with st.spinner("Analyzing your documents and generating optimized résumé..."):
-            resume_text = read_file(resume_file)
-            job_text = read_file(job_file)
+        if not resume_text or not job_text:
+            st.error("Could not extract text from uploaded files. Please try again with different files.")
+            st.stop()
+        
+        # Check for PDF extraction errors
+        if resume_text.startswith("Error:") or job_text.startswith("Error:"):
+            st.error(f"Error processing files: {resume_text if resume_text.startswith('Error:') else job_text}")
+            st.stop()
+        
+        # Build prompt and call OpenAI
+        prompt = build_prompt(resume_text, job_text, tone=tone)
+        output = call_openai_chat(prompt, api_key_input)
+        
+        # Check for errors in API response
+        if output.startswith("Error:"):
+            st.error(output)
+            st.stop()
+        
+        # Display success message
+        st.success("Résumé successfully generated!")
+        
+        # Inject JS callback to notify Android app
+        st.markdown("""
+        <script>
+            console.log("Resume generation completed successfully");
+            if (window.AndroidApp && typeof window.AndroidApp.notifyResumeGenerated === "function") {
+                window.AndroidApp.notifyResumeGenerated();
+            }
+        </script>
+        """, unsafe_allow_html=True)
+        
+        # Display generated resume
+        st.subheader("📋 Generated Résumé Preview")
+        st.text_area("Generated Résumé", output, height=400, label_visibility="collapsed", key="generated_resume")
+        
+        # Create download buttons
+        with tempfile.TemporaryDirectory() as tmpdir:
+            if show_preview:
+                st.info("Review your résumé above before downloading.")
             
-            if not resume_text or not job_text:
-                st.error("Could not extract text from uploaded files. Please try again with different files.")
-                st.stop()
+            col1, col2 = st.columns(2)
             
-            # Check for PDF extraction errors
-            if resume_text.startswith("Error:") or job_text.startswith("Error:"):
-                st.error(f"Error processing files: {resume_text if resume_text.startswith('Error:') else job_text}")
-                st.stop()
+            with col1:
+                try:
+                    docx_file = save_resume_docx(output, f"{tmpdir}/resume.docx")
+                    with open(docx_file, "rb") as f:
+                        st.download_button(
+                            "📝 Download Word Document", 
+                            f, 
+                            file_name="tailored_resume.docx",
+                            help="Download in Microsoft Word format for further editing",
+                            use_container_width=True,
+                            key="download_docx"
+                        )
+                except Exception as e:
+                    st.error(f"Error creating Word document: {str(e)}")
             
-            # Build prompt and call OpenAI
-            prompt = build_prompt(resume_text, job_text, tone=tone)
-            output = call_openai_chat(prompt, api_key_input)
-            
-            # Check for errors in API response
-            if output.startswith("Error:"):
-                st.error(output)
-                st.stop()
-            
-            # Display success message
-            st.success("Résumé successfully generated!")
-            
-            # Inject JS callback to notify Android app
-            st.markdown("""
-            <script>
-                console.log("Resume generation completed successfully");
-                if (window.AndroidApp && typeof window.AndroidApp.notifyResumeGenerated === "function") {
-                    window.AndroidApp.notifyResumeGenerated();
-                }
-            </script>
-            """, unsafe_allow_html=True)
-            
-            # Display generated resume
-            st.subheader("📋 Generated Résumé Preview")
-            st.text_area("Generated Résumé", output, height=400, label_visibility="collapsed", key="generated_resume")
-            
-            # Create download buttons
-            with tempfile.TemporaryDirectory() as tmpdir:
-                if show_preview:
-                    st.info("Review your résumé above before downloading.")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    try:
-                        docx_file = save_resume_docx(output, f"{tmpdir}/resume.docx")
-                        with open(docx_file, "rb") as f:
-                            st.download_button(
-                                "📝 Download Word Document", 
-                                f, 
-                                file_name="tailored_resume.docx",
-                                help="Download in Microsoft Word format for further editing",
-                                use_container_width=True,
-                                key="download_docx"
-                            )
-                    except Exception as e:
-                        st.error(f"Error creating Word document: {str(e)}")
-                
-                with col2:
-                    try:
-                        pdf_file = save_resume_pdf(output, f"{tmpdir}/resume.pdf")
-                        with open(pdf_file, "rb") as f:
-                            st.download_button(
-                                "📄 Download PDF", 
-                                f, 
-                                file_name="tailored_resume.pdf",
-                                help="Download in PDF format for easy sharing",
-                                use_container_width=True,
-                                key="download_pdf"
-                            )
-                    except Exception as e:
-                        st.error(f"Error creating PDF document: {str(e)}")
+            with col2:
+                try:
+                    pdf_file = save_resume_pdf(output, f"{tmpdir}/resume.pdf")
+                    with open(pdf_file, "rb") as f:
+                        st.download_button(
+                            "📄 Download PDF", 
+                            f, 
+                            file_name="tailored_resume.pdf",
+                            help="Download in PDF format for easy sharing",
+                            use_container_width=True,
+                            key="download_pdf"
+                        )
+                except Exception as e:
+                    st.error(f"Error creating PDF document: {str(e)}")
 
 if __name__ == "__main__":
     main()
