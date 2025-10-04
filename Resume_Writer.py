@@ -542,7 +542,7 @@ if st.button("✨ Generate Tailored Résumé", type="primary", use_container_wid
 
             
             # Check for PDF extraction errors
-            if resume_text.startswith("Error:") or job_text.startswith("Error:"):
+        if resume_text.startswith("Error:") or job_text.startswith("Error:"):
                 st.error(f"Error processing files: {resume_text if resume_text.startswith('Error:') else job_text}")
                 st.stop()
             
