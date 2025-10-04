@@ -497,75 +497,77 @@ def main():
         return ""
     
     # Generate button with improved feedback
-if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True):
-    if not resume_file or not job_file:
-        st.error("Please upload both your résumé and the job description.")
-        st.stop()
-
-    with st.spinner("Analyzing your documents and generating optimized résumé..."):
-        resume_text = read_file(resume_file)
-        job_text = read_file(job_file)
-
-        if not resume_text or not job_text:
-            st.error("Could not extract text from uploaded files. Please try again with different files.")
+    # Generate button with improved feedback
+    if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True):
+        if not resume_file or not job_file:
+            st.error("Please upload both your résumé and the job description.")
             st.stop()
 
-        # Check for PDF extraction errors
-        if resume_text.startswith("Error:") or job_text.startswith("Error:"):
-            st.error(f"Error processing files: {resume_text if resume_text.startswith('Error:') else job_text}")
-            st.stop()
+        with st.spinner("Analyzing your documents and generating optimized résumé..."):
+            resume_text = read_file(resume_file)
+            job_text = read_file(job_file)
 
-        # Build prompt and call OpenAI
-        prompt = build_prompt(resume_text, job_text, tone=tone)
-        output = call_openai_chat(prompt, api_key_input)
+            if not resume_text or not job_text:
+                st.error("Could not extract text from uploaded files. Please try again with different files.")
+                st.stop()
 
-        # Check for errors in API response
-        if output.startswith("Error:"):
-            st.error(output)
-            st.stop()
+            # Check for PDF extraction errors
+            if resume_text.startswith("Error:") or job_text.startswith("Error:"):
+                st.error(f"Error processing files: {resume_text if resume_text.startswith('Error:') else job_text}")
+                st.stop()
 
-        # Generate optimized resume
-        optimized_resume = generate_resume(resume_text, job_text)
-        st.success("✨ Your tailored résumé has been generated!")
+            # Build prompt and call OpenAI
+            prompt = build_prompt(resume_text, job_text, tone=tone)
+            output = call_openai_chat(prompt, api_key_input)
 
-        # Display generated résumé
-        st.subheader("📋 Generated Résumé Preview")
-        st.text_area("", output, height=400, label_visibility="collapsed")
+            # Check for errors in API response
+            if output.startswith("Error:"):
+                st.error(output)
+                st.stop()
 
-        # ✅ Correct indentation: exactly 4 spaces further than the `with` block
-        with tempfile.TemporaryDirectory() as tmpdir:
-            if show_preview:
-                st.info("Review your résumé above before downloading.")
+            # Generate optimized resume
+            optimized_resume = generate_resume(resume_text, job_text)
+            st.success("✨ Your tailored résumé has been generated!")
 
-            col1, col2 = st.columns(2)
+            # Display generated résumé
+            st.subheader("📋 Generated Résumé Preview")
+            st.text_area("", output, height=400, label_visibility="collapsed")
 
-            with col1:
-                try:
-                    docx_file = save_resume_docx(output, f"{tmpdir}/resume.docx")
-                    with open(docx_file, "rb") as f:
-                        st.download_button(
-                            "📝 Download Word Document",
-                            f,
-                            file_name="tailored_resume.docx",
-                            help="Download in Microsoft Word format for further editing",
-                            use_container_width=True
-                        )
-                except Exception as e:
-                    st.error(f"Error creating Word document: {str(e)}")
+            # ✅ Correct indentation: inside button block
+            with tempfile.TemporaryDirectory() as tmpdir:
+                if show_preview:
+                    st.info("Review your résumé above before downloading.")
 
-            with col2:
-                try:
-                    pdf_file = save_resume_pdf(output, f"{tmpdir}/resume.pdf")
-                    with open(pdf_file, "rb") as f:
-                        st.download_button(
-                            "📄 Download PDF",
-                            f,
-                            file_name="tailored_resume.pdf",
-                            help="Download in PDF format for easy sharing",
-                            use_container_width=True
-                        )
-                except Exception as e:
-                    st.error(f"Error creating PDF document: {str(e)}")
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    try:
+                        docx_file = save_resume_docx(output, f"{tmpdir}/resume.docx")
+                        with open(docx_file, "rb") as f:
+                            st.download_button(
+                                "📝 Download Word Document",
+                                f,
+                                file_name="tailored_resume.docx",
+                                help="Download in Microsoft Word format for further editing",
+                                use_container_width=True
+                            )
+                    except Exception as e:
+                        st.error(f"Error creating Word document: {str(e)}")
+
+                with col2:
+                    try:
+                        pdf_file = save_resume_pdf(output, f"{tmpdir}/resume.pdf")
+                        with open(pdf_file, "rb") as f:
+                            st.download_button(
+                                "📄 Download PDF",
+                                f,
+                                file_name="tailored_resume.pdf",
+                                help="Download in PDF format for easy sharing",
+                                use_container_width=True
+                            )
+                    except Exception as e:
+                        st.error(f"Error creating PDF document: {str(e)}")
+
 
 
 if __name__ == "__main__":
