@@ -497,18 +497,49 @@ def main():
         return ""
     
     # Generate button with improved feedback
-    if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True):
-        if not resume_file or not job_file:
-            st.error("Please upload both your résumé and the job description.")
-            st.stop()
+if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True):
+    if not resume_file or not job_file:
+        st.error("Please upload both your résumé and the job description.")
+        st.stop()
+    
+    with st.spinner("Analyzing your documents and generating optimized résumé..."):
+        resume_text = read_file(resume_file)
+        job_text = read_file(job_file)
         
-        with st.spinner("Analyzing your documents and generating optimized résumé..."):
-            resume_text = read_file(resume_file)
-            job_text = read_file(job_file)
-            
-            if not resume_text or not job_text:
-                st.error("Could not extract text from uploaded files. Please try again with different files.")
-                st.stop()
+        if not resume_text or not job_text:
+            st.error("Could not extract text from uploaded files. Please try again with different files.")
+            st.stop()
+
+        # ✅ Your résumé generation logic here
+        optimized_resume = generate_resume(resume_text, job_text)  
+        st.success("✨ Your tailored résumé has been generated!")
+
+        # Show the generated résumé (preview / download links etc.)
+        st.download_button(
+            label="📄 Download as Word (.docx)",
+            data=save_as_word(optimized_resume),
+            file_name="tailored_resume.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        st.download_button(
+            label="📑 Download as PDF",
+            data=save_as_pdf(optimized_resume),
+            file_name="tailored_resume.pdf",
+            mime="application/pdf"
+        )
+
+        # ✅ Notify Android app via JS bridge
+        st.markdown(
+            """
+            <script>
+                if (window.AndroidApp && AndroidApp.notifyResumeGenerated) {
+                    AndroidApp.notifyResumeGenerated();
+                }
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
+
             
             # Check for PDF extraction errors
             if resume_text.startswith("Error:") or job_text.startswith("Error:"):
