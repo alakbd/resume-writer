@@ -510,38 +510,7 @@ if st.button("✨ Generate Tailored Résumé", type="primary", use_container_wid
             st.error("Could not extract text from uploaded files. Please try again with different files.")
             st.stop()
 
-        # ✅ Your résumé generation logic here
-        optimized_resume = generate_resume(resume_text, job_text)  
-        st.success("✨ Your tailored résumé has been generated!")
-
-        # Show the generated résumé (preview / download links etc.)
-        st.download_button(
-            label="📄 Download as Word (.docx)",
-            data=save_as_word(optimized_resume),
-            file_name="tailored_resume.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-        st.download_button(
-            label="📑 Download as PDF",
-            data=save_as_pdf(optimized_resume),
-            file_name="tailored_resume.pdf",
-            mime="application/pdf"
-        )
-
-        # ✅ Notify Android app via JS bridge
-        st.markdown(
-            """
-            <script>
-                if (window.AndroidApp && AndroidApp.notifyResumeGenerated) {
-                    AndroidApp.notifyResumeGenerated();
-                }
-            </script>
-            """,
-            unsafe_allow_html=True
-        )
-
-            
-            # Check for PDF extraction errors
+        # Check for PDF extraction errors
             if resume_text.startswith("Error:") or job_text.startswith("Error:"):
                 st.error(f"Error processing files: {resume_text if resume_text.startswith('Error:') else job_text}")
                 st.stop()
@@ -557,7 +526,42 @@ if st.button("✨ Generate Tailored Résumé", type="primary", use_container_wid
 
             # Display success message
             st.success("Résumé successfully generated!")
+            
+            # Show the generated résumé (preview / download links etc.)
+            st.download_button(
+                label="📄 Download as Word (.docx)",
+                data=save_as_word(optimized_resume),
+                file_name="tailored_resume.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+            st.download_button(
+                label="📑 Download as PDF",
+                data=save_as_pdf(optimized_resume),
+                file_name="tailored_resume.pdf",
+                mime="application/pdf"
+            )
 
+
+        # ✅ Your résumé generation logic here
+        optimized_resume = generate_resume(resume_text, job_text)  
+        st.success("✨ Your tailored résumé has been generated!")
+
+        
+
+        # ✅ Notify Android app via JS bridge
+        st.markdown(
+            """
+            <script>
+                if (window.AndroidApp && AndroidApp.notifyResumeGenerated) {
+                    AndroidApp.notifyResumeGenerated();
+                }
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
+
+            
+            
 
             
             # Display generated resume
