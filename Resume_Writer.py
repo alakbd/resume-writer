@@ -496,9 +496,16 @@ def main():
             return extract_text_from_pdf(file)
         return ""
     
+    
     # Generate button with improved feedback
-    # Generate button with improved feedback
+if "native_button_clicked" not in st.session_state:
+    st.session_state.native_button_clicked = False
+
+# Show button only if not already clicked
+if not st.session_state.native_button_clicked:
     if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True):
+        st.session_state.native_button_clicked = True  # Hide this button after click
+
         if not resume_file or not job_file:
             st.error("Please upload both your résumé and the job description.")
             st.stop()
@@ -525,15 +532,12 @@ def main():
                 st.error(output)
                 st.stop()
 
-            # Generate optimized resume
-            optimized_resume = generate_resume(resume_text, job_text)
             st.success("✨ Your tailored résumé has been generated!")
 
             # Display generated résumé
             st.subheader("📋 Generated Résumé Preview")
             st.text_area("", output, height=400, label_visibility="collapsed")
 
-            # ✅ Correct indentation: inside button block
             with tempfile.TemporaryDirectory() as tmpdir:
                 if show_preview:
                     st.info("Review your résumé above before downloading.")
@@ -567,6 +571,7 @@ def main():
                             )
                     except Exception as e:
                         st.error(f"Error creating PDF document: {str(e)}")
+
 
 
 
