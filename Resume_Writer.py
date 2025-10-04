@@ -548,15 +548,16 @@ if st.button("✨ Generate Tailored Résumé", type="primary", use_container_wid
             
             # Build prompt and call OpenAI
             prompt = build_prompt(resume_text, job_text, tone=tone)
-                output = call_openai_chat(prompt, api_key_input)
-            
+            output = call_openai_chat(prompt, api_key_input)
+
             # Check for errors in API response
             if output.startswith("Error:"):
                 st.error(output)
                 st.stop()
-            
+
             # Display success message
             st.success("Résumé successfully generated!")
+
             
             # Display generated resume
             st.subheader("📋 Generated Résumé Preview")
