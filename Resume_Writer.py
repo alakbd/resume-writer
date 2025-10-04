@@ -524,15 +524,15 @@ if st.button("✨ Generate Tailored Résumé", type="primary", use_container_wid
             st.error(output)
             st.stop()
 
-        # ✅ Your résumé generation logic here
+        # Generate optimized resume
         optimized_resume = generate_resume(resume_text, job_text)
         st.success("✨ Your tailored résumé has been generated!")
 
-        # Display generated résumé (this must be exactly 4 spaces further indented from the `with`)
+        # Display generated résumé
         st.subheader("📋 Generated Résumé Preview")
         st.text_area("", output, height=400, label_visibility="collapsed")
 
-        # Create download buttons
+        # ✅ Correct indentation: exactly 4 spaces further than the `with` block
         with tempfile.TemporaryDirectory() as tmpdir:
             if show_preview:
                 st.info("Review your résumé above before downloading.")
@@ -567,53 +567,6 @@ if st.button("✨ Generate Tailored Résumé", type="primary", use_container_wid
                 except Exception as e:
                     st.error(f"Error creating PDF document: {str(e)}")
 
-        # ✅ Notify Android app via JS bridge
-        st.markdown(
-            """
-            <script>
-                if (window.AndroidApp && AndroidApp.notifyResumeGenerated) {
-                    AndroidApp.notifyResumeGenerated();
-                }
-            </script>
-            """,
-            unsafe_allow_html=True
-        )
-
-            
-            # Create download buttons
-            with tempfile.TemporaryDirectory() as tmpdir:
-                if show_preview:
-                    st.info("Review your résumé above before downloading.")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    try:
-                        docx_file = save_resume_docx(output, f"{tmpdir}/resume.docx")
-                        with open(docx_file, "rb") as f:
-                            st.download_button(
-                                "📝 Download Word Document", 
-                                f, 
-                                file_name="tailored_resume.docx",
-                                help="Download in Microsoft Word format for further editing",
-                                use_container_width=True
-                            )
-                    except Exception as e:
-                        st.error(f"Error creating Word document: {str(e)}")
-                
-                with col2:
-                    try:
-                        pdf_file = save_resume_pdf(output, f"{tmpdir}/resume.pdf")
-                        with open(pdf_file, "rb") as f:
-                            st.download_button(
-                                "📄 Download PDF", 
-                                f, 
-                                file_name="tailored_resume.pdf",
-                                help="Download in PDF format for easy sharing",
-                                use_container_width=True
-                            )
-                    except Exception as e:
-                        st.error(f"Error creating PDF document: {str(e)}")
 
 if __name__ == "__main__":
     main()
