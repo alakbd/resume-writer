@@ -9,6 +9,11 @@ Enhanced Resume Writer with Professional DOCX & PDF Export
 Includes sample preview feature for demonstration
 """
 
+"""
+Enhanced Resume Writer with Professional DOCX & PDF Export
+Includes sample preview feature for demonstration
+"""
+
 import streamlit as st
 import openai
 import os
@@ -428,6 +433,7 @@ def main():
         st.title("🔒 Privacy Notice")
         st.caption("""
         - Your documents are processed securely
+        - Files are sent to OpenAI only for résumé generation
         - No data is stored on our servers after processing
         - Always review generated content for accuracy
         """)
@@ -496,75 +502,69 @@ def main():
             return extract_text_from_pdf(file)
         return ""
     
-    
     # Generate button with improved feedback
-if "native_button_clicked" not in st.session_state:
-    st.session_state.native_button_clicked = False
-
-# Show button only if not already clicked
-if not st.session_state.native_button_clicked:
     if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True):
-        st.session_state.native_button_clicked = True  # Hide this button after click
-
         if not resume_file or not job_file:
             st.error("Please upload both your résumé and the job description.")
             st.stop()
-
+        
         with st.spinner("Analyzing your documents and generating optimized résumé..."):
             resume_text = read_file(resume_file)
             job_text = read_file(job_file)
-
+            
             if not resume_text or not job_text:
                 st.error("Could not extract text from uploaded files. Please try again with different files.")
                 st.stop()
-
+            
             # Check for PDF extraction errors
             if resume_text.startswith("Error:") or job_text.startswith("Error:"):
                 st.error(f"Error processing files: {resume_text if resume_text.startswith('Error:') else job_text}")
                 st.stop()
-
+            
             # Build prompt and call OpenAI
             prompt = build_prompt(resume_text, job_text, tone=tone)
             output = call_openai_chat(prompt, api_key_input)
-
+            
             # Check for errors in API response
             if output.startswith("Error:"):
                 st.error(output)
                 st.stop()
-
-            st.success("✨ Your tailored résumé has been generated!")
-
-            # Display generated résumé
+            
+            # Display success message
+            st.success("Résumé successfully generated!")
+            
+            # Display generated resume
             st.subheader("📋 Generated Résumé Preview")
             st.text_area("", output, height=400, label_visibility="collapsed")
-
+            
+            # Create download buttons
             with tempfile.TemporaryDirectory() as tmpdir:
                 if show_preview:
                     st.info("Review your résumé above before downloading.")
-
+                
                 col1, col2 = st.columns(2)
-
+                
                 with col1:
                     try:
                         docx_file = save_resume_docx(output, f"{tmpdir}/resume.docx")
                         with open(docx_file, "rb") as f:
                             st.download_button(
-                                "📝 Download Word Document",
-                                f,
+                                "📝 Download Word Document", 
+                                f, 
                                 file_name="tailored_resume.docx",
                                 help="Download in Microsoft Word format for further editing",
                                 use_container_width=True
                             )
                     except Exception as e:
                         st.error(f"Error creating Word document: {str(e)}")
-
+                
                 with col2:
                     try:
                         pdf_file = save_resume_pdf(output, f"{tmpdir}/resume.pdf")
                         with open(pdf_file, "rb") as f:
                             st.download_button(
-                                "📄 Download PDF",
-                                f,
+                                "📄 Download PDF", 
+                                f, 
                                 file_name="tailored_resume.pdf",
                                 help="Download in PDF format for easy sharing",
                                 use_container_width=True
@@ -572,12 +572,9 @@ if not st.session_state.native_button_clicked:
                     except Exception as e:
                         st.error(f"Error creating PDF document: {str(e)}")
 
-
-
-
 if __name__ == "__main__":
     main()
-
+    
 # In[ ]:
 
 
