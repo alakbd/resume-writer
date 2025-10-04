@@ -504,23 +504,63 @@ def main():
         return ""
     
     # Add hidden button for Android app to trigger
-    st.markdown("""
-    <button id="tailorResumeButton" style="display: none;" onclick="handleResumeGeneration()">
-        Generate Resume
-    </button>
-    <script>
-        function handleResumeGeneration() {
-            // This function will be called by the Android app
-            console.log("Resume generation triggered by Android app");
-        }
-    </script>
-    """, unsafe_allow_html=True)
+    # Add hidden button for Android app to trigger
+st.markdown("""
+<button id="tailorResumeButton" style="display: none;" onclick="handleResumeGeneration()">
+    Generate Resume
+</button>
+<script>
+    function handleResumeGeneration() {
+        // This function will be called by the Android app
+        console.log("Resume generation triggered by Android app");
+    }
+</script>
+""", unsafe_allow_html=True)
+
+# Mobile-responsive sticky button CSS
+st.markdown("""
+<style>
+/* Mobile sticky button */
+@media (max-width: 768px) {
+    [data-testid="stVerticalBlock"] > div:has(button[kind="primary"]) {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        background: white !important;
+        padding: 15px 20px !important;
+        z-index: 9999 !important;
+        box-shadow: 0 -4px 12px rgba(0,0,0,0.15) !important;
+        border-top: 1px solid #e6e6e6 !important;
+    }
     
-    # Generate button with improved feedback and JS injection
-    if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True, key="tailorResumeButton"):
-        if not resume_file or not job_file:
-            st.error("Please upload both your résumé and the job description.")
-            st.stop()
+    [data-testid="stVerticalBlock"] > div:has(button[kind="primary"]) button {
+        width: 100% !important;
+        margin: 0 !important;
+        font-size: 16px !important;
+        padding: 14px !important;
+    }
+    
+    /* Add bottom padding to prevent content overlap */
+    .main .block-container {
+        padding-bottom: 100px !important;
+    }
+}
+
+/* Desktop styling remains normal */
+@media (min-width: 769px) {
+    [data-testid="stVerticalBlock"] > div:has(button[kind="primary"]) {
+        position: static;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Generate button with improved feedback and JS injection
+if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True, key="tailorResumeButton"):
+    if not resume_file or not job_file:
+        st.error("Please upload both your résumé and the job description.")
+        st.stop()
         
         with st.spinner("Analyzing your documents and generating optimized résumé..."):
             resume_text = read_file(resume_file)
