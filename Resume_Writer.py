@@ -408,6 +408,7 @@ def show_sample_preview():
                     st.error(f"Error creating sample PDF document: {str(e)}")
 
 # -------- Improved Streamlit UI --------
+# -------- Enhanced Streamlit UI with JS Injection --------
 def main():
     st.set_page_config(
         page_title="Professional Résumé Writer", 
@@ -502,8 +503,21 @@ def main():
             return extract_text_from_pdf(file)
         return ""
     
-    # Generate button with improved feedback
-    if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True):
+    # Add hidden button for Android app to trigger
+    st.markdown("""
+    <button id="tailorResumeButton" style="display: none;" onclick="handleResumeGeneration()">
+        Generate Resume
+    </button>
+    <script>
+        function handleResumeGeneration() {
+            // This function will be called by the Android app
+            console.log("Resume generation triggered by Android app");
+        }
+    </script>
+    """, unsafe_allow_html=True)
+    
+    # Generate button with improved feedback and JS injection
+    if st.button("✨ Generate Tailored Résumé", type="primary", use_container_width=True, key="tailorResumeButton"):
         if not resume_file or not job_file:
             st.error("Please upload both your résumé and the job description.")
             st.stop()
@@ -533,9 +547,19 @@ def main():
             # Display success message
             st.success("Résumé successfully generated!")
             
+            # Inject JS callback to notify Android app
+            st.markdown("""
+            <script>
+                console.log("Resume generation completed successfully");
+                if (window.AndroidApp && typeof window.AndroidApp.notifyResumeGenerated === "function") {
+                    window.AndroidApp.notifyResumeGenerated();
+                }
+            </script>
+            """, unsafe_allow_html=True)
+            
             # Display generated resume
             st.subheader("📋 Generated Résumé Preview")
-            st.text_area("", output, height=400, label_visibility="collapsed")
+            st.text_area("Generated Résumé", output, height=400, label_visibility="collapsed", key="generated_resume")
             
             # Create download buttons
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -553,7 +577,8 @@ def main():
                                 f, 
                                 file_name="tailored_resume.docx",
                                 help="Download in Microsoft Word format for further editing",
-                                use_container_width=True
+                                use_container_width=True,
+                                key="download_docx"
                             )
                     except Exception as e:
                         st.error(f"Error creating Word document: {str(e)}")
@@ -567,7 +592,8 @@ def main():
                                 f, 
                                 file_name="tailored_resume.pdf",
                                 help="Download in PDF format for easy sharing",
-                                use_container_width=True
+                                use_container_width=True,
+                                key="download_pdf"
                             )
                     except Exception as e:
                         st.error(f"Error creating PDF document: {str(e)}")
