@@ -525,10 +525,10 @@ if st.button("✨ Generate Tailored Résumé", type="primary", use_container_wid
             st.stop()
 
         # ✅ Your résumé generation logic here
-        optimized_resume = generate_resume(resume_text, job_text)  
+        optimized_resume = generate_resume(resume_text, job_text)
         st.success("✨ Your tailored résumé has been generated!")
 
-        # Display generated résumé
+        # Display generated résumé (this must be exactly 4 spaces further indented from the `with`)
         st.subheader("📋 Generated Résumé Preview")
         st.text_area("", output, height=400, label_visibility="collapsed")
 
@@ -579,14 +579,6 @@ if st.button("✨ Generate Tailored Résumé", type="primary", use_container_wid
             unsafe_allow_html=True
         )
 
-
-            
-            
-
-            
-            # Display generated resume
-            st.subheader("📋 Generated Résumé Preview")
-            st.text_area("", output, height=400, label_visibility="collapsed")
             
             # Create download buttons
             with tempfile.TemporaryDirectory() as tmpdir:
