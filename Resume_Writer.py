@@ -545,7 +545,7 @@ if st.button("✨ Generate Tailored Résumé", type="primary", use_container_wid
             if resume_text.startswith("Error:") or job_text.startswith("Error:"):
                 st.error(f"Error processing files: {resume_text if resume_text.startswith('Error:') else job_text}")
                 st.stop()
-            
+
             # Build prompt and call OpenAI
             prompt = build_prompt(resume_text, job_text, tone=tone)
             output = call_openai_chat(prompt, api_key_input)
@@ -557,6 +557,7 @@ if st.button("✨ Generate Tailored Résumé", type="primary", use_container_wid
 
             # Display success message
             st.success("Résumé successfully generated!")
+
 
             
             # Display generated resume
